@@ -26,9 +26,23 @@ A pure C11 implementation of a Markdown → ANSI terminal renderer. The binary i
 
 ## Quick Start
 
-### Build & Install
+### One-Liner Install
 
 ```bash
+git clone https://github.com/Open-Technology-Foundation/md2ansi.c.git && cd md2ansi.c && make && sudo make install
+```
+
+Unprivileged install to `~/.local` (no `sudo`):
+
+```bash
+git clone https://github.com/Open-Technology-Foundation/md2ansi.c.git && cd md2ansi.c && make && make install PREFIX=$HOME/.local
+```
+
+### Build & Install (step-by-step)
+
+```bash
+git clone https://github.com/Open-Technology-Foundation/md2ansi.c.git
+cd md2ansi.c
 make
 sudo make install         # installs binary + companions + man + completion + mdview data
 ```
