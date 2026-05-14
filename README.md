@@ -1,4 +1,4 @@
-# MD2ANSI (C Implementation)
+# MD2ANSI
 
 ![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)
@@ -6,6 +6,8 @@
 ![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)
 
 A **zero-dependency C11 implementation** that converts Markdown to ANSI-colored terminal output. Renders headers, lists, tables, code blocks with syntax highlighting, links, footnotes, and inline formatting directly to a TTY with correct Unicode width measurement and predictable performance.
+
+> Looking for a pure Bash implementation? See [**md2ansi.bash**](https://github.com/Open-Technology-Foundation/md2ansi.bash).
 
 ## Overview
 
