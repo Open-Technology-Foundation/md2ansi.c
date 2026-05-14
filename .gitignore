@@ -1,0 +1,9 @@
+md2ansi
+*.o
+*.dSYM
+tests/fixtures/tmp/
+# Dev-only symlink to local BCS reference; not portable across machines.
+BASH-CODING-STANDARD.md
+# Local AI assistant context — never tracked.
+CLAUDE.md
+.claude/

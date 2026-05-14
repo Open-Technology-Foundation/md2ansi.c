@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Extract links from markdown files
+set -euo pipefail
+shopt -s inherit_errexit shift_verbose extglob nullglob
+
+#shellcheck disable=SC2034
+declare -r VERSION=1.0.0
+#shellcheck disable=SC2155
+declare -r SCRIPT_PATH=$(realpath -- "$0")
+declare -r SCRIPT_NAME=${SCRIPT_PATH##*/}
+
+# Function to remove UTM parameters from URLs
+remove_utm() {
+  sed -E '
+    :loop
+    s/([?&])utm_[^=]+=[^&]*(&|$)/\1/
+    tloop
+    s/[?&]$//
+  '
+  return 0
+}
+
+main() {
+  local -a Files=()
+  local -- file Refs ref url cleaned
+
+  if (($#==0)) || [[ $1 == '-h' || $1 == '--help' ]]; then
+    echo "Usage: $SCRIPT_NAME file [file...]"
+    echo 'Extract links from text/markdown files'
+    exit 0
+  fi
+
+  Files=("$@")
+  for file in "${Files[@]}"; do
+    if [[ ! -f "$file" ]]; then
+      >&2 echo "$SCRIPT_NAME: error: File ${file@Q} not found."
+      exit 3
+    fi
+
+    # Strip fenced code blocks and inline code spans
+    cleaned=$(awk '
+      /^[[:space:]]*(`{3,}|~{3,})/ { code = !code; next }
+      code { next }
+      { gsub(/`[^`]+`/, ""); print }
+    ' "$file")
+
+    # Extract all types of links and process them
+    { # Extract inline links [text](url)
+      grep -oE '\[[^]]*\]\([^)]*\)' <<< "$cleaned" | sed -E 's/\[[^]]*\]\(([^)]*)\)/\1/' ||:
+
+      # Extract bare URLs <http://example.com>
+      grep -oE '<https?://[^>]+>' <<< "$cleaned" | sed -E 's/<(https?:\/\/[^>]+)>/\1/' ||:
+
+      # Extract reference-style links
+      Refs=$(grep -oE '\[[^]]*\]\[[^]]*\]' <<< "$cleaned" | sed -E 's/\[[^]]*\]\[([^]]*)\]/\1/') ||:
+      while IFS= read -r ref; do
+        [[ -n "$ref" ]] || continue
+        url=$(grep -E "^\[$ref\]:" <<< "$cleaned" | sed -E 's/\[[^]]*\]:\s*(.*)/\1/') ||:
+        [[ -z "$url" ]] || echo "$url"
+      done <<< "$Refs"
+    } | remove_utm | sort | uniq
+  done
+}
+
+main "$@"
+#fin

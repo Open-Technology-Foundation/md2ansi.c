@@ -1,0 +1,240 @@
+# shellcheck shell=bash
+# bash completion for md2ansi (C implementation v1.0.1) + companion utilities
+#
+# This file is sourced by bash, not executed. It must not use strict error
+# handling (set -e, set -u, set -o pipefail) as those can break the
+# interactive shell or interfere with the bash-completion framework.
+#
+# Installation:
+#   System-wide: /usr/share/bash-completion/completions/md2ansi
+#   User-local:  ~/.local/share/bash-completion/completions/md2ansi
+#
+# Registers completion functions for:
+#   md2ansi          — main renderer
+#   md               — pager wrapper (shares md2ansi flags)
+#   md-link-extract  — link extractor
+#   mdview           — pandoc browser preview
+#   ansi-info        — terminal palette utility
+#
+# shellcheck disable=SC2207  # COMPREPLY assignment is standard for bash completion
+# shellcheck disable=SC2034  # Variables may be consumed by bash-completion framework
+
+# Enable extglob for @(pattern|pattern) syntax used by _filedir
+shopt -q extglob || shopt -s extglob
+
+# ================================================================================
+# Fallback Functions for Systems Without bash-completion Framework
+# ================================================================================
+
+if ! declare -F _init_completion &>/dev/null; then
+  _init_completion() {
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    words=("${COMP_WORDS[@]}")
+    cword=$COMP_CWORD
+    return 0
+  }
+fi
+
+if ! declare -F _filedir &>/dev/null; then
+  _filedir() {
+    COMPREPLY=($(compgen -f -- "$cur"))
+  }
+fi
+
+# ================================================================================
+# md2ansi + md (md inherits the renderer's flag surface)
+# ================================================================================
+
+# Completion function for md2ansi and md (pager wrapper).
+# Handles: option flags, --width values, --color modes, --color=MODE form, and
+# markdown file completion.
+_md2ansi_completion() {
+  local cur prev words cword
+  _init_completion || return
+
+  # Inline --color=MODE: complete the value after the '='
+  if [[ $cur == --color=* ]]; then
+    local val=${cur#--color=}
+    local -a modes=(auto always never)
+    COMPREPLY=($(compgen -W "${modes[*]}" -- "$val"))
+    local i
+    for i in "${!COMPREPLY[@]}"; do
+      COMPREPLY[i]="--color=${COMPREPLY[i]}"
+    done
+    return 0
+  fi
+
+  case "$prev" in
+    -w|--width)
+      local -a widths=(60 80 100 120 140 160 180 200)
+      COMPREPLY=($(compgen -W "${widths[*]}" -- "$cur"))
+      return 0
+      ;;
+    --color)
+      local -a modes=(auto always never)
+      COMPREPLY=($(compgen -W "${modes[*]}" -- "$cur"))
+      return 0
+      ;;
+  esac
+
+  if [[ $cur == -* ]]; then
+    local -a opts=(
+      '-D' '-h' '-t' '-V' '-w'
+      '--debug' '--help' '--plain' '--version' '--width'
+      '--color' '--color=auto' '--color=always' '--color=never'
+      '--no-bare-urls'
+      '--no-footnotes' '--no-images' '--no-links'
+      '--no-syntax-highlight' '--no-tables' '--no-task-lists'
+    )
+    COMPREPLY=($(compgen -W "${opts[*]}" -- "$cur"))
+    return 0
+  fi
+
+  if declare -F _filedir &>/dev/null && [[ $(type -t _filedir) == "function" ]]; then
+    _filedir '@(md|markdown|MD|MARKDOWN)'
+  else
+    local -a md_files
+    md_files=($(compgen -f -X '!*.md' -- "$cur"))
+    md_files+=($(compgen -f -X '!*.markdown' -- "$cur"))
+    md_files+=($(compgen -d -- "$cur"))
+    if (( ${#md_files[@]} == 0 )); then
+      md_files=($(compgen -f -- "$cur"))
+    fi
+    COMPREPLY=("${md_files[@]}")
+  fi
+
+  return 0
+}
+
+# ================================================================================
+# mdview — browser-based markdown preview
+# ================================================================================
+
+# Completion function for mdview.
+# Handles: option flags, --theme names (discovered from data dirs), --window-size
+# suggestions, --browser executable paths, and markdown file completion.
+_mdview_completion() {
+  local cur prev words cword
+  _init_completion || return
+
+  case "$prev" in
+    -t|--theme)
+      # Discover available theme names from data directories
+      local -a themes=()
+      local script_path script_dir prefix sys_datadir
+      script_path=$(command -v mdview 2>/dev/null)
+      if [[ -n "$script_path" ]]; then
+        script_path=$(realpath -- "$script_path" 2>/dev/null) || script_path=
+      fi
+      if [[ -n "$script_path" ]]; then
+        script_dir=${script_path%/*}
+        prefix=${script_path%/bin/*}
+        [[ "$prefix" == "$script_path" ]] && prefix=
+      fi
+      : "${prefix:=/usr/local}"
+      sys_datadir="$prefix/share/mdview"
+      # Dev mode: themes next to script
+      [[ -n "${script_dir:-}" && -d "$script_dir/themes" ]] && sys_datadir="$script_dir"
+      local user_datadir="${XDG_DATA_HOME:-$HOME/.local/share}/mdview"
+      local theme_file
+      for theme_file in "$sys_datadir"/themes/*.css "$user_datadir"/themes/*.css; do
+        [[ -f "$theme_file" ]] || continue
+        local name=${theme_file##*/}
+        name=${name%.css}
+        themes+=("$name")
+      done
+      COMPREPLY=($(compgen -W "${themes[*]}" -- "$cur"))
+      return 0
+      ;;
+    -s|--window-size)
+      local -a sizes=(800x600 960x1080 1024x768 1200x900 1280x1024 1920x1080)
+      COMPREPLY=($(compgen -W "${sizes[*]}" -- "$cur"))
+      return 0
+      ;;
+    -b|--browser)
+      COMPREPLY=($(compgen -c -- "$cur"))
+      return 0
+      ;;
+  esac
+
+  if [[ $cur == -* ]]; then
+    local -a opts=(
+      '-t' '-s' '-b' '-P' '-h' '-V'
+      '--theme' '--window-size' '--browser' '--preserve-tmp' '--help' '--version'
+    )
+    COMPREPLY=($(compgen -W "${opts[*]}" -- "$cur"))
+    return 0
+  fi
+
+  if declare -F _filedir &>/dev/null && [[ $(type -t _filedir) == "function" ]]; then
+    _filedir '@(md|markdown|MD|MARKDOWN|txt|rst)'
+  else
+    local -a md_files
+    md_files=($(compgen -f -X '!*.md' -- "$cur"))
+    md_files+=($(compgen -f -X '!*.markdown' -- "$cur"))
+    md_files+=($(compgen -d -- "$cur"))
+    if (( ${#md_files[@]} == 0 )); then
+      md_files=($(compgen -f -- "$cur"))
+    fi
+    COMPREPLY=("${md_files[@]}")
+  fi
+
+  return 0
+}
+
+# ================================================================================
+# md-link-extract — URL extractor
+# ================================================================================
+
+# Completion function for md-link-extract.
+# Accepts -h / --help; otherwise completes markdown files.
+_mdle_completion() {
+  local cur prev words cword
+  _init_completion || return
+
+  if [[ $cur == -* ]]; then
+    local -a opts=('-h' '--help')
+    COMPREPLY=($(compgen -W "${opts[*]}" -- "$cur"))
+    return 0
+  fi
+
+  if declare -F _filedir &>/dev/null && [[ $(type -t _filedir) == "function" ]]; then
+    _filedir '@(md|markdown|MD|MARKDOWN)'
+  else
+    COMPREPLY=($(compgen -f -- "$cur"))
+  fi
+  return 0
+}
+
+# ================================================================================
+# ansi-info — terminal palette utility
+# ================================================================================
+
+# Completion function for ansi-info.
+# Handles option flags only (no file arguments).
+_ansi_info_completion() {
+  local cur prev words cword
+  _init_completion || return
+
+  if [[ $cur == -* ]]; then
+    local -a opts=('-h' '-V' '--help' '--version')
+    COMPREPLY=($(compgen -W "${opts[*]}" -- "$cur"))
+    return 0
+  fi
+
+  COMPREPLY=()
+  return 0
+}
+
+# ================================================================================
+# Register Completion
+# ================================================================================
+
+complete -F _md2ansi_completion  md2ansi
+complete -F _md2ansi_completion  md
+complete -F _mdview_completion   mdview
+complete -F _mdle_completion     md-link-extract
+complete -F _ansi_info_completion ansi-info
+
+#fin

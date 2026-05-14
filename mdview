@@ -1,0 +1,297 @@
+#!/usr/bin/bash
+#shellcheck disable=SC2015
+#bcscheck disable=BCS0108
+# mdview — Markdown viewer using pandoc with configurable theme + syntax highlighting
+
+mdview() {
+  #bcscheck disable=BCS0703: prefixed _error() to avoid polluting caller namespace when sourced
+  _error() { >&2 echo "mdview: ✗ $*"; }
+  #bcscheck disable=BCS0201: function-scoped vars shared with nested _load_config()
+  declare -- _MDVIEW_CSS _MDVIEW_THEME _MDVIEW_DATADIR
+
+  _load_config() {
+    # Save any pre-set values from CLI/env (${var+1} = set, even if empty)
+    local -i _have_theme=${MDVIEW_THEME+1}
+    local -i _have_size=${MDVIEW_WINDOW_SIZE+1}
+    local -i _have_browser=${MDVIEW_BROWSER+1}
+    local -- _save_theme=${MDVIEW_THEME:-}
+    local -- _save_size=${MDVIEW_WINDOW_SIZE:-}
+    local -- _save_browser=${MDVIEW_BROWSER:-}
+
+    # Defaults
+    MDVIEW_THEME=${MDVIEW_THEME:-github-dark}
+    MDVIEW_WINDOW_SIZE=960x1080
+    MDVIEW_BROWSER=
+
+    # Detect system prefix from script install location
+    local -- script_path prefix script_dir
+    script_path=$(realpath -- "${BASH_SOURCE[0]}" 2>/dev/null) ||:
+    if [[ -n $script_path ]]; then
+      script_dir=${script_path%/*}
+      prefix=${script_path%/bin/*}
+      # If strip didn't match /bin/, we're in dev mode — clear prefix
+      [[ $prefix == "$script_path" ]] && prefix='' ||:
+    fi
+    : "${prefix:=/usr/local}"
+    local -- sys_datadir="$prefix"/share/mdview
+    # Dev mode: check script's own directory for themes/mdview.conf
+    if [[ -n ${script_dir:-} && -d "$script_dir"/themes ]]; then
+      sys_datadir=$script_dir
+    fi
+    local -- user_configdir="${XDG_CONFIG_HOME:-$HOME/.config}"/mdview
+    local -- user_datadir="${XDG_DATA_HOME:-$HOME/.local/share}"/mdview
+
+    # Source config: system first, then user overrides
+    # shellcheck disable=SC1091
+    [[ ! -f "$sys_datadir"/mdview.conf ]] || source "$sys_datadir"/mdview.conf
+    # shellcheck disable=SC1091
+    [[ ! -f "$user_configdir"/mdview.conf ]] || source "$user_configdir"/mdview.conf
+
+    # CLI/env overrides win over config files (||: prevents set -e abort when flag=0)
+    # shellcheck disable=SC2015
+    ((_have_theme))   && MDVIEW_THEME=$_save_theme   ||:
+    # shellcheck disable=SC2015
+    ((_have_size))    && MDVIEW_WINDOW_SIZE=$_save_size ||:
+    # shellcheck disable=SC2015
+    ((_have_browser)) && MDVIEW_BROWSER=$_save_browser ||:
+
+    # Resolve theme files: user dir first, then system dir
+    local -- theme_name=$MDVIEW_THEME
+    local -- theme_dir=''
+    if [[ -f "$user_datadir"/themes/"$theme_name".css && -f "$user_datadir"/themes/"$theme_name".theme ]]; then
+      theme_dir="$user_datadir"/themes
+    elif [[ -f "$sys_datadir"/themes/"$theme_name".css && -f "$sys_datadir"/themes/"$theme_name".theme ]]; then
+      theme_dir="$sys_datadir"/themes
+    fi
+
+    if [[ -z $theme_dir ]]; then
+      _error "Theme ${theme_name@Q} not found (need $theme_name.css + $theme_name.theme)"
+      return 19
+    fi
+
+    _MDVIEW_CSS="$theme_dir"/"$theme_name".css
+    _MDVIEW_THEME="$theme_dir"/"$theme_name".theme
+    _MDVIEW_DATADIR=$sys_datadir
+  }
+
+  # Recursively convert linked .md files; uses 'visited' and 'src_root' from caller scope
+  _crawl() {
+    local -- md_file=$1
+    local -- real_path
+    real_path=$(realpath -e -- "$md_file" 2>/dev/null) || return 0
+    # Cycle guard: skip if already processed (visited[] is in parent scope)
+    [[ -v visited["$real_path"] ]] && return 0 ||:
+    visited["$real_path"]=1
+
+    local -- md_dir=${md_file%/*}
+    # Compute parent HTML path for back-link injection into children
+    local -- parent_html
+    parent_html=$(realpath --relative-to="$src_root" -- "$md_file")
+    parent_html="${parent_html%.md}".html
+    local -- href path resolved out_path child_dir back_href back_snippet
+    while IFS= read -r href; do
+      [[ -n $href ]] || continue
+      path=${href%%#*}
+      # Skip URLs and parent-directory traversals
+      [[ $path == *://* ]] && continue ||:
+      [[ $path == ../* || $path == */../* ]] && continue ||:
+      # Resolve relative to the markdown file's directory
+      resolved="$md_dir"/"$path"
+      [[ -f $resolved ]] || continue
+
+      # Output path mirrors source tree relative to root
+      out_path=$(realpath --relative-to="$src_root" -- "$resolved")
+      out_path="${out_path%.md}".html
+      # Mirror directory structure in session_dir
+      [[ $out_path == */* ]] && mkdir -p "$session_dir"/"${out_path%/*}" ||:
+      # Compute relative back link from child to parent
+      child_dir=${out_path%/*}
+      [[ $out_path == */* ]] || child_dir=.
+      back_href=$(realpath -m --relative-to="$session_dir/$child_dir" -- "$session_dir/$parent_html")
+      back_snippet="$session_dir"/.back-nav.html
+      printf '<p style="margin:0.8em 0"><a href="%s">[&#8592; Back]</a></p>\n' "$back_href" > "$back_snippet"
+      "$pandoc" "$resolved" "${pandoc_args[@]}" \
+        --include-before-body="$back_snippet" \
+        --include-after-body="$back_snippet" \
+        --metadata title="${resolved##*/}" \
+        -o "$session_dir/$out_path" 2>/dev/null ||:
+      _crawl "$resolved"
+    done < <(
+      grep -oP '\]\(\K[^)]*\.md(?:#[^)]*)?(?=\))' "$md_file" 2>/dev/null ||:
+      grep -oP '^\[[^\]]+\]:\s+\K\S+\.md(?:#\S*)?' "$md_file" 2>/dev/null ||:
+    )
+  }
+
+  if (($# == 0 || $# > 1)); then
+    _error 'Invalid number of arguments'
+    return 2
+  fi
+
+  local -- file=${1:-}
+  [[ -f $file ]] || { _error "File ${file@Q} not found"; return 3; }
+  file=$(realpath -- "$file")
+
+  _load_config || return $?
+
+  # Resolve Lua filter for inter-file .md → .html link rewriting
+  local -- lua_filter="$_MDVIEW_DATADIR"/rewrite-md-links.lua
+  [[ -f $lua_filter ]] || lua_filter=''
+
+  local -- TMP_DIR="${XDG_RUNTIME_DIR:-${TMP_DIR:-/tmp}}"/mdview
+  mkdir -p "$TMP_DIR" || { _error "Cannot create ${TMP_DIR@Q}"; return 5; }
+  # Per-session directory: deterministic filenames for linked file resolution
+  local -- session_dir
+  session_dir=$(mktemp -d -p "$TMP_DIR" session.XXXXX) || { _error 'Cannot create temp session'; return 5; }
+  local -- tmpfile=${file##*/}
+  tmpfile="$session_dir"/"${tmpfile%.md}".html
+
+  local -- pandoc
+  pandoc=$(command -v pandoc) || { _error 'pandoc not found'; return 18; }
+
+  # Common pandoc args (shared with _convert_linked_files)
+  local -a pandoc_args=(
+    -s --from=gfm --to=html --ascii --embed-resources
+    --css="$_MDVIEW_CSS"
+    --highlight-style="$_MDVIEW_THEME"
+  )
+  [[ -n $lua_filter ]] && pandoc_args+=(--lua-filter="$lua_filter") ||:
+
+  "$pandoc" "$file" "${pandoc_args[@]}" \
+    --metadata title="${file##*/}" \
+    -o "$tmpfile" || {
+      local -i err=$?
+      _error "pandoc error $err"
+      return "$err"
+    }
+
+  # Recursively convert linked .md files so inter-file links work in browser
+  local -A visited=()
+  if [[ -n $lua_filter ]]; then
+    local -- src_root=${file%/*}
+    _crawl "$file"
+  fi
+
+  local -- browser
+  if [[ -n $MDVIEW_BROWSER ]]; then
+    browser=$MDVIEW_BROWSER
+  else
+    browser=$(command -v google-chrome || command -v chromium-browser || command -v chromium ||:)
+  fi
+  if [[ -n $browser ]]; then
+    "$browser" --app="file://$tmpfile" --window-size="${MDVIEW_WINDOW_SIZE/x/,}" &>/dev/null & disown
+  else
+    xdg-open "$tmpfile" &>/dev/null & disown
+  fi
+
+  # Delayed cleanup or preserve session directory
+  if [[ -n ${MDVIEW_PRESERVE_TMP:-} ]]; then
+    echo "$session_dir"
+  else
+    local -i cleanup_delay=$((30 + 2 * ${#visited[@]}))
+    (sleep "$cleanup_delay" && rm -rf "$session_dir" ||:) &>/dev/null & disown
+  fi
+}
+declare -fx mdview
+
+[[ ${BASH_SOURCE[0]} == "$0" ]] || return 0
+
+set -euo pipefail
+shopt -s inherit_errexit shift_verbose extglob nullglob
+
+declare -r SCRIPT_NAME=${0##*/}
+declare -r VERSION=1.0.1
+declare -rx PATH=/usr/local/bin:/usr/bin:/bin
+
+die() {
+  local -i code=$1; shift
+  >&2 echo "$SCRIPT_NAME: ✗ $*"
+  exit "$code"
+}
+
+usage() {
+  cat <<HELP
+$SCRIPT_NAME $VERSION — Markdown viewer using pandoc with theme support
+
+Usage: $SCRIPT_NAME [OPTIONS] <file>
+
+Options:
+  -t, --theme NAME         Theme name (default: github-dark)
+  -s, --window-size WxH    Browser window size (default: 960x1080)
+  -b, --browser PATH       Browser executable (default: auto-detect)
+  -P, --preserve-tmp       Keep session directory and print its path
+  -V, --version            Show version and exit
+  -h, --help               Show this help and exit
+
+Configuration:
+  System config:  <prefix>/share/mdview/mdview.conf
+  User config:    \${XDG_CONFIG_HOME:-~/.config}/mdview/mdview.conf
+
+  System themes:  <prefix>/share/mdview/themes/
+  User themes:    \${XDG_DATA_HOME:-~/.local/share}/mdview/themes/
+
+  Each theme requires two files: <name>.css and <name>.theme
+  Precedence: CLI flags > user config > system config > defaults
+
+Examples:
+  $SCRIPT_NAME README.md
+  $SCRIPT_NAME --theme github-dark README.md
+  $SCRIPT_NAME --window-size 1200x900 doc.md
+HELP
+}
+
+noarg() {
+  (($# >= 2)) || die 8 "Option ${1@Q} requires an argument"
+}
+
+# Parse arguments
+declare -- file=
+while (($#)); do
+  case $1 in
+    -t|--theme)
+      noarg "$@"; shift
+      export MDVIEW_THEME=$1
+      ;;
+    -s|--window-size)
+      noarg "$@"; shift
+      [[ $1 =~ ^[0-9]+x[0-9]+$ ]] || die 22 "Invalid window size ${1@Q} (expected WIDTHxHEIGHT)"
+      export MDVIEW_WINDOW_SIZE=$1
+      ;;
+    -b|--browser)
+      noarg "$@"; shift
+      export MDVIEW_BROWSER=$1
+      ;;
+    -P|--preserve-tmp)
+      export MDVIEW_PRESERVE_TMP=1
+      ;;
+    -V|--version)
+      printf '%s %s\n' "$SCRIPT_NAME" "$VERSION"
+      exit 0
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      (($#)) && file=$1 ||:
+      break
+      ;;
+    -[tsbPVh]?*)
+      set -- "${1:0:2}" "-${1:2}" "${@:2}"
+      continue
+      ;;
+    -*)
+      die 22 "Invalid option ${1@Q}"
+      ;;
+    *)
+      [[ -z $file ]] || die 2 "Too many arguments ${1@Q}"
+      file=$1
+      ;;
+  esac
+  shift
+done
+
+[[ -n $file ]] || die 2 "No file specified. See '${SCRIPT_NAME} --help'."
+
+mdview "$file"
+#fin

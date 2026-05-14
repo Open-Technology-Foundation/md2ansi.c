@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+# Display ANSI 256-colour palette, SGR attributes, truecolor, and terminal info
+set -euo pipefail
+shopt -s inherit_errexit shift_verbose extglob nullglob
+
+declare -r VERSION='1.1.0'
+declare -r SCRIPT_NAME=${0##*/}
+
+# xterm default RGB for indices 0-15
+declare -ra XTERM_16_HEX=(
+  '#000000' '#800000' '#008000' '#808000'
+  '#000080' '#800080' '#008080' '#c0c0c0'
+  '#808080' '#ff0000' '#00ff00' '#ffff00'
+  '#0000ff' '#ff00ff' '#00ffff' '#ffffff'
+)
+
+# 6-level cube intensity ladder used by xterm-256colour for codes 16-231
+declare -ra CUBE_LEVELS=(0 95 135 175 215 255)
+
+usage() {
+  cat <<HELP
+$SCRIPT_NAME $VERSION - Display ANSI palette and terminal capability info
+
+Renders four sections:
+  1. 256-colour palette (16 standard, 6x6x6 cube, grayscale ramp) with
+     hex/RGB labels beneath every swatch.
+  2. SGR text attributes (bold, dim, italic, underline, blink, etc.).
+  3. 24-bit truecolor ramps (red, green, blue, hue sweep, gray).
+  4. Terminal capability footer (TERM, COLORTERM, tput colors, truecolor).
+
+Output is paged via 'less -FXRS' (auto-quits if it fits on screen).
+
+Usage: $SCRIPT_NAME [OPTIONS]
+
+Options:
+  -h, --help     Show this help message and exit
+  -V, --version  Show version information and exit
+
+Examples:
+  $SCRIPT_NAME              # View the full report
+  $SCRIPT_NAME | cat        # Bypass pager, dump raw escape codes
+HELP
+}
+
+# Trim leading and trailing whitespace from a string
+trim() {
+  local -- var="$*"
+  var=${var#"${var%%[![:space:]]*}"}
+  printf '%s' "${var%"${var##*[![:space:]]}"}"
+}
+
+center_text() {
+  local -i lpad rpad w=$1; shift
+  local -- text
+  text=$(trim "$*")
+  ((${#text} >= w)) && { printf '%s' "${text:0:$w}"; return 0; } ||:
+  lpad=$(((w - ${#text}) / 2))
+  rpad=$(((w - ${#text}) - lpad))
+  printf '%*s%s%*s' "$lpad" '' "$text" "$rpad" ''
+}
+
+display_colour() {
+  local -- mode=$1 code=$2
+  printf '\e[%s;5;%sm%s\e[0m' \
+    "$mode" "$code" "$(center_text 9 "$mode;5;$code")"
+}
+
+# Map a 256-colour index to '#RRGGBB' (xterm canonical levels).
+code_to_hex() {
+  local -i code=$1
+  local -i r g b n
+  if (( code < 16 )); then
+    printf '%s' "${XTERM_16_HEX[code]}"
+  elif (( code < 232 )); then
+    n=$((code - 16))
+    r=${CUBE_LEVELS[n / 36]}
+    g=${CUBE_LEVELS[(n / 6) % 6]}
+    b=${CUBE_LEVELS[n % 6]}
+    printf '#%02x%02x%02x' "$r" "$g" "$b"
+  else
+    n=$((8 + 10 * (code - 232)))
+    printf '#%02x%02x%02x' "$n" "$n" "$n"
+  fi
+}
+
+# Print a row of 4 codes as swatch line + hex label line.
+# Each code occupies an 18-char cell pair (fg cell + bg cell).
+display_row() {
+  local -i c
+  for c in "$@"; do
+    display_colour 38 "$c"
+    display_colour 48 "$c"
+  done
+  printf '\n'
+  for c in "$@"; do
+    center_text 18 "$(code_to_hex "$c")"
+  done
+  printf '\n'
+}
+
+display_block_standard16() {
+  local -i i
+  local -a row=()
+  printf '\e[3;32m%s\e[0m\n' 'Standard 16 colours:'
+  for i in {0..15}; do
+    row+=("$i")
+    if (( ${#row[@]} == 4 )); then
+      display_row "${row[@]}"
+      row=()
+    fi
+  done
+  printf '\n'
+}
+
+display_block_cube() {
+  local -i i
+  local -a row=()
+  printf '\e[3;32m%s\e[0m\n' 'High-intensity 6x6x6 colour cube (16-231):'
+  for i in {16..231}; do
+    row+=("$i")
+    if (( ${#row[@]} == 4 )); then
+      display_row "${row[@]}"
+      row=()
+    fi
+  done
+  printf '\n'
+}
+
+display_block_grayscale() {
+  local -i i
+  local -a row=()
+  printf '\e[3;32m%s\e[0m\n' 'Grayscale colours (232-255):'
+  for i in {232..255}; do
+    row+=("$i")
+    if (( ${#row[@]} == 4 )); then
+      display_row "${row[@]}"
+      row=()
+    fi
+  done
+  printf '\n'
+}
+
+display_sgr_attributes() {
+  printf '\e[3;32m%s\e[0m\n' 'Text attributes (SGR codes):'
+  printf '  \e[1m%s\e[0m   \e[2m%s\e[0m   \e[3m%s\e[0m\n'   '1 bold' '2 dim' '3 italic'
+  printf '  \e[4m%s\e[0m   \e[21m%s\e[0m   \e[5m%s\e[0m\n'  '4 underline' '21 double-und' '5 blink'
+  printf '  \e[7m%s\e[0m   \e[9m%s\e[0m   \e[53m%s\e[0m\n'  '7 reverse' '9 strike' '53 overline'
+  printf '\n  Combined:\n'
+  printf '    \e[1;31m%s\e[0m   \e[3;34m%s\e[0m   \e[4;32m%s\e[0m\n' \
+    'bold red' 'italic blue' 'underline green'
+  printf '    \e[1;3;36m%s\e[0m   \e[7;33m%s\e[0m\n' \
+    'bold-italic cyan' 'reverse yellow'
+}
+
+# Convert HSV(h, 1, 1) -> 8-bit RGB via name references.
+# h in [0,360); writes results into the named integer vars.
+hsv_to_rgb() {
+  local -i h=$1
+  local -n _r=$2 _g=$3 _b=$4
+  local -i sector pos x
+  sector=$((h / 60))
+  pos=$((h % 60))
+  if (( sector % 2 == 0 )); then
+    x=$((255 * pos / 60))
+  else
+    x=$((255 - 255 * pos / 60))
+  fi
+  case $sector in
+    0) _r=255; _g=$x;  _b=0   ;;
+    1) _r=$x;  _g=255; _b=0   ;;
+    2) _r=0;   _g=255; _b=$x  ;;
+    3) _r=0;   _g=$x;  _b=255 ;;
+    4) _r=$x;  _g=0;   _b=255 ;;
+    5) _r=255; _g=0;   _b=$x  ;;
+    *) _r=255; _g=255; _b=255 ;;
+  esac
+}
+
+display_truecolor() {
+  local -i n width=64 v r g b h
+  printf '\e[3;32m%s\e[0m\n' '24-bit truecolor (\e[38;2;R;G;Bm):'
+
+  printf '  Red:    '
+  n=0
+  while (( n < width )); do
+    v=$((n * 255 / (width - 1)))
+    printf '\e[48;2;%d;0;0m ' "$v"
+    n+=1
+  done
+  printf '\e[0m\n'
+
+  printf '  Green:  '
+  n=0
+  while (( n < width )); do
+    v=$((n * 255 / (width - 1)))
+    printf '\e[48;2;0;%d;0m ' "$v"
+    n+=1
+  done
+  printf '\e[0m\n'
+
+  printf '  Blue:   '
+  n=0
+  while (( n < width )); do
+    v=$((n * 255 / (width - 1)))
+    printf '\e[48;2;0;0;%dm ' "$v"
+    n+=1
+  done
+  printf '\e[0m\n'
+
+  printf '  Hue:    '
+  n=0
+  while (( n < width )); do
+    h=$((n * 360 / width))
+    hsv_to_rgb "$h" r g b
+    printf '\e[48;2;%d;%d;%dm ' "$r" "$g" "$b"
+    n+=1
+  done
+  printf '\e[0m\n'
+
+  printf '  Gray:   '
+  n=0
+  while (( n < width )); do
+    v=$((n * 255 / (width - 1)))
+    printf '\e[48;2;%d;%d;%dm ' "$v" "$v" "$v"
+    n+=1
+  done
+  printf '\e[0m\n'
+}
+
+# Renders the final two report sections together:
+#   1. Standard 16 named codes (with their xterm names: black, red, …, brwhite)
+#   2. Terminal capability footer (TERM, COLORTERM, tput colors, truecolor)
+# The truecolor flag is inferred from COLORTERM only — terminals that support
+# truecolor without setting COLORTERM will be reported as 'no'.
+display_terminal_info() {
+  local -i tput_cols i
+  local -- truecolor='no'
+  tput_cols=$(tput colors 2>/dev/null || printf 0)
+  [[ ${COLORTERM:-} == 'truecolor' || ${COLORTERM:-} == '24bit' ]] && truecolor='yes' ||:
+
+  printf '\e[3;32m%s\e[0m\n' 'Standard 16 named codes:'
+  local -ra NAMES=(
+    black red green yellow blue magenta cyan white
+    brblack brred brgreen bryellow brblue brmagenta brcyan brwhite
+  )
+  for i in {0..15}; do
+    printf '  \e[38;5;%dm%2d %-10s\e[0m' "$i" "$i" "${NAMES[i]}"
+    (( (i + 1) % 4 == 0 )) && printf '\n' ||:
+  done
+  printf '\n'
+
+  printf '\e[3;32m%s\e[0m\n' 'Terminal info:'
+  printf '  TERM        = %s\n' "${TERM:-(unset)}"
+  printf '  COLORTERM   = %s\n' "${COLORTERM:-(unset)}"
+  printf '  tput colors = %d\n' "$tput_cols"
+  printf '  Truecolor   = %s\n' "$truecolor"
+}
+
+# Top-level orchestrator: emits the four report sections in order
+# (palette, SGR attributes, truecolor ramps, named codes + terminal info).
+# Section helpers print their own headings; this function only adds the
+# overall title and inter-section spacing.
+display_ansi_palette() {
+  printf '\e[0m\e[3;32m%s\e[0m\n\n' 'ANSI 256-colour palette'
+  display_block_standard16
+  display_block_cube
+  display_block_grayscale
+  display_sgr_attributes
+  printf '\n'
+  display_truecolor
+  printf '\n'
+  display_terminal_info
+}
+
+main() {
+  while (($#)); do
+    case $1 in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -V|--version)
+        printf '%s %s\n' "$SCRIPT_NAME" "$VERSION"
+        exit 0
+        ;;
+      -[hV]*)
+        # Split a contiguous bundle of short options (e.g. -hV, -Vh) into
+        # separate -h / -V tokens. Only -h and -V are valid here, so the
+        # bundle is always exactly two characters; the loop iterates again
+        # against the freshly-prepended single-letter options.
+        local -- bundle=${1#-}
+        shift
+        set -- "-${bundle:0:1}" "-${bundle:1}" "$@"
+        continue
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        >&2 printf '%s: error: Invalid option %s\n' "$SCRIPT_NAME" "${1@Q}"
+        >&2 printf "Try '%s --help' for usage.\n" "$SCRIPT_NAME"
+        exit 22
+        ;;
+      *)
+        >&2 printf '%s: error: Unexpected argument %s\n' "$SCRIPT_NAME" "${1@Q}"
+        exit 2
+        ;;
+    esac
+    shift
+  done
+
+  display_ansi_palette | less -FXRS
+}
+
+main "$@"
+
+#fin

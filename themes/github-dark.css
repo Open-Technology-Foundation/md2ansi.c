@@ -1,0 +1,194 @@
+/* GitHub Dark Mode theme for pandoc */
+body {
+    background-color: #0d1117;
+    color: #e6edf3;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    max-width: 55em;
+    margin: 0 auto;
+    padding: 2em 2em;
+    word-wrap: break-word;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #e6edf3;
+}
+h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; }
+h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid #21262d; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+h5 { font-size: 0.875em; }
+h6 { font-size: 0.85em; color: #8b949e; }
+
+/* Links */
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Paragraphs and text */
+p { margin-top: 0; margin-bottom: 1em; }
+strong { font-weight: 600; color: #e6edf3; }
+em { font-style: italic; }
+
+/* Inline code */
+code {
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 85%;
+    background-color: rgba(110,118,129,0.4);
+    border-radius: 6px;
+    padding: 0.2em 0.4em;
+    color: #e6edf3;
+}
+
+/* Code blocks */
+pre {
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 85%;
+    background-color: #161b22;
+    border-radius: 6px;
+    padding: 16px;
+    overflow: auto;
+    line-height: 1.45;
+}
+pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: 100%;
+}
+
+/* Pandoc sourceCode blocks */
+div.sourceCode {
+    margin: 1em 0;
+    background-color: #161b22;
+    border-radius: 6px;
+    color: #e6edf3;
+}
+pre.sourceCode {
+    margin: 0;
+    background-color: #161b22;
+}
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+
+/* Line numbers */
+pre.numberSource code { counter-reset: source-line 0; }
+pre.numberSource code > span { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before {
+    content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -moz-user-select: none; -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #6e7681;
+}
+pre.numberSource { margin-left: 3em; padding-left: 4px; }
+@media screen {
+    div.sourceCode { overflow: auto; }
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+@media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+
+/* Syntax highlighting — GitHub dark palette */
+code span.al { color: #f85149; }              /* Alert */
+code span.an { color: #8b949e; font-style: italic; } /* Annotation */
+code span.at { color: #79c0ff; }              /* Attribute */
+code span.bn { color: #79c0ff; }              /* BaseN */
+code span.bu { color: #ffa657; }              /* BuiltIn */
+code span.cf { color: #ff7b72; }              /* ControlFlow */
+code span.ch { color: #a5d6ff; }              /* Char */
+code span.cn { color: #79c0ff; font-weight: bold; } /* Constant */
+code span.co { color: #8b949e; font-style: italic; } /* Comment */
+code span.cv { color: #8b949e; font-style: italic; font-weight: bold; } /* CommentVar */
+code span.do { color: #8b949e; font-style: italic; } /* Documentation */
+code span.dt { color: #ff7b72; }              /* DataType */
+code span.dv { color: #79c0ff; }              /* DecVal */
+code span.er { color: #f85149; }              /* Error */
+code span.ex { color: #d2a8ff; }              /* Extension */
+code span.fl { color: #79c0ff; }              /* Float */
+code span.fu { color: #d2a8ff; }              /* Function */
+code span.im { color: #ffa657; }              /* Import */
+code span.in { color: #8b949e; font-style: italic; font-weight: bold; } /* Information */
+code span.kw { color: #ff7b72; }              /* Keyword */
+code span.op { color: #e6edf3; }              /* Operator */
+code span.ot { color: #79c0ff; }              /* Other */
+code span.pp { color: #ff7b72; font-weight: bold; } /* Preprocessor */
+code span.sc { color: #a5d6ff; }              /* SpecialChar */
+code span.ss { color: #a5d6ff; }              /* SpecialString */
+code span.st { color: #a5d6ff; }              /* String */
+code span.va { color: #ffa657; }              /* Variable */
+code span.vs { color: #a5d6ff; }              /* VerbatimString */
+code span.wa { color: #f85149; font-weight: bold; } /* Warning */
+
+/* Blockquotes */
+blockquote {
+    margin: 0 0 1em 0;
+    padding: 0 1em;
+    color: #8b949e;
+    border-left: 0.25em solid #3b434b;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+
+/* Horizontal rules */
+hr {
+    height: 0.25em;
+    padding: 0;
+    margin: 1.5em 0;
+    background-color: #21262d;
+    border: 0;
+}
+
+/* Tables */
+table {
+    border-spacing: 0;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+    width: auto;
+    overflow: auto;
+    display: block;
+}
+th, td {
+    padding: 6px 13px;
+    border: 1px solid #30363d;
+}
+th {
+    font-weight: 600;
+    background-color: #161b22;
+}
+tr { background-color: #0d1117; }
+tr:nth-child(2n) { background-color: #161b22; }
+
+/* Lists */
+ul, ol { padding-left: 2em; margin-bottom: 1em; }
+li + li { margin-top: 0.25em; }
+ul.task-list { list-style: none; padding-left: 1.5em; }
+ul.task-list li input[type="checkbox"] {
+    margin-right: 0.5em;
+    vertical-align: middle;
+}
+
+/* Images */
+img { max-width: 100%; border-radius: 6px; }
+
+/* Definition lists */
+dt { font-weight: 600; margin-top: 1em; }
+dd { margin-left: 1em; margin-bottom: 0.5em; }
+
+/* Misc pandoc elements */
+span.smallcaps { font-variant: small-caps; }
+span.underline { text-decoration: underline; }
+div.column { display: inline-block; vertical-align: top; width: 50%; }
+div.hanging-indent { margin-left: 1.5em; text-indent: -1.5em; }
+code { white-space: pre-wrap; }

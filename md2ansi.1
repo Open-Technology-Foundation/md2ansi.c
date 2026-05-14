@@ -1,0 +1,543 @@
+.TH MD2ANSI 1 "2026-05-14" "md2ansi 1.0.1" "User Commands"
+.SH NAME
+md2ansi \- convert Markdown to ANSI-colored terminal output
+.SH SYNOPSIS
+.B md2ansi
+[\fIOPTIONS\fR] [\fIFILE\fR...]
+.SH DESCRIPTION
+.B md2ansi
+is a zero-dependency C11 implementation that converts Markdown documents to
+ANSI-colored terminal output. It reads Markdown from files or standard input
+and produces richly formatted output suitable for terminal viewing.
+.PP
+The binary links only against the C standard library (no ncurses, no
+terminfo, no regex). Scanners are hand-rolled, eliminating ReDoS attack
+surface and giving predictable linear-time performance.
+.PP
+The tool supports a comprehensive set of Markdown features including
+headers, lists, tables, code blocks with syntax highlighting, blockquotes,
+inline and reference links, autolinks, inline formatting, task lists,
+footnotes, backslash escapes, and YAML frontmatter stripping. All features
+can be selectively disabled via command-line options.
+.SH OPTIONS
+.SS "Basic Options"
+.TP
+.BR \-h ", " \-\-help
+Display usage information and exit.
+.TP
+.BR \-V ", " \-\-version
+Display version information and exit.
+.TP
+.BR \-D ", " \-\-debug
+Enable debug mode with detailed trace output sent to stderr. Each message
+carries a timestamped sequence number so trace order is unambiguous when
+piped.
+.TP
+.BR \-w ", " \-\-width " \fIWIDTH\fR"
+Force a specific terminal width instead of auto-detecting. Valid range is
+20\-500 columns. Useful for generating output for specific display widths or
+when terminal detection fails.
+.TP
+.BR \-t ", " \-\-plain
+Enable plain text mode, disabling all feature toggles. Output is rendered
+without rich formatting cues. Combine with
+.B \-\-color=never
+for pure plain text.
+.TP
+.BI \-\-color= MODE
+Control ANSI colour output:
+.B auto
+(default, honours
+.BR NO_COLOR " and " isatty (3)),
+.BR always ", or " never .
+.SS "Feature Toggle Options"
+All Markdown features are enabled by default. Use these options to disable
+specific features:
+.TP
+.B \-\-no\-footnotes
+Disable footnote processing. Footnote references and definitions render as
+plain text and no footnote section is emitted.
+.TP
+.B \-\-no\-syntax\-highlight
+Disable syntax highlighting in fenced code blocks. Code displays in
+monochrome without language-specific colouring.
+.TP
+.B \-\-no\-tables
+Disable table formatting. Tables render as plain text without borders or
+column alignment.
+.TP
+.B \-\-no\-task\-lists
+Disable task list (checkbox) formatting. Task items render as regular list
+items without checkboxes.
+.TP
+.B \-\-no\-images
+Disable image placeholders. Image markup renders as plain text instead of
+[IMG: alt] placeholders.
+.TP
+.B \-\-no\-links
+Disable link formatting. Links render as plain text without underlining or
+special formatting.
+.TP
+.B \-\-no\-bare\-urls
+Disable autolinking of bare http(s):// URLs in text. Angle autolinks and
+explicit `[text](url)` still render normally.
+.SS "Other Options"
+.TP
+.B \-\-
+End of options. All subsequent arguments are treated as filenames, even if
+they begin with a dash.
+.SH MARKDOWN FEATURES
+.B md2ansi
+supports a comprehensive set of Markdown elements:
+.SS "Headers"
+All heading levels H1 through H6 are supported with a distinct 256-colour
+gradient:
+.PP
+.RS
+H1 \- Bright yellow
+.br
+H2 \- Orange
+.br
+H3 \- Green
+.br
+H4 \- Blue
+.br
+H5 \- Purple
+.br
+H6 \- Dark gray
+.RE
+.PP
+Inline formatting is supported within headers.
+.SS "Inline Formatting"
+.TP
+.B Bold
+Rendered using **text**
+.TP
+.I Italic
+Rendered using *text* (neighbour-char guarded against snake_case clashes)
+.TP
+.BI "Bold Italic"
+Rendered using ***text***, **_text_**, or _**text**_
+.TP
+.B Strikethrough
+Rendered using ~~text~~
+.TP
+.B Inline Code
+Rendered using `code`. Formatting inside backticks is suppressed (literal).
+.TP
+.B Inline Links
+Rendered using [text](url) with underline and cyan colour.
+.TP
+.B Reference Links
+Rendered using [text][ref] with [ref]: url definitions.
+.TP
+.B Shortcut Reference Links
+Bare [ref] is matched against a definition if one exists.
+.TP
+.B Autolinks
+Angle autolinks <https://...>, <mailto:...>, <ftp://...> render as cyan
+underlined links. Bare http(s):// URLs in text are auto-linked by default
+(disable with \-\-no\-bare\-urls).
+.TP
+.B Backslash Escapes
+The 17 CommonMark backslash-escape characters are honoured: \\*, \\_, \\\\,
+\\#, \\[, \\], \\(, \\), \\{, \\}, \\!, \\., \\+, \\-, \\>, \\~, and \\`.
+.TP
+.B Images
+Rendered using ![alt](url) as [IMG: alt] placeholders.
+.SS "Lists"
+.TP
+.B Unordered Lists
+Using \- or * markers with proper indentation.
+.TP
+.B Ordered Lists
+Using 1., 2., etc. with automatic numbering.
+.TP
+.B Task Lists
+Using \- [ ] (unchecked) and \- [x] (checked) with checkbox symbols.
+.TP
+.B Nested Lists
+Full support for nested lists (every 2 spaces of indent = one level), with
+inline formatting inside list items and width-aware wrapping.
+.SS "Tables"
+GFM pipe-delimited tables with:
+.RS
+.IP \(bu 2
+Column alignment: :--- (left), :---: (center), ---: (right)
+.IP \(bu 2
+Automatic column sizing via
+.BR wcwidth (3)
+(CJK characters count as 2 columns)
+.IP \(bu 2
+Unicode box-drawing borders (\(em \(br \(br etc.)
+.IP \(bu 2
+Inline formatting within cells (bold, italic, code, links)
+.IP \(bu 2
+Backslash-escaped pipes (\\|) preserved as literal content
+.IP \(bu 2
+Backtick-wrapped pipes (`a|b`) preserved as literal content
+.RE
+.SS "Code Blocks"
+.TP
+.B Fenced
+``` or ~~~ delimited, with language specification on the opening fence.
+.TP
+.B Indented
+4-space or 1-tab prefixed lines are treated as code blocks.
+.PP
+Syntax highlighting covers Python, JavaScript, and Bash with language
+aliases (py, js, sh, shell). Keyword, string, number, comment, and function
+tokens are coloured. Python docstrings (''' and \(dq\(dq\(dq) render in green.
+.SS "Additional Elements"
+.TP
+.B Blockquotes
+Using > prefix with dark background highlighting.
+.TP
+.B Horizontal Rules
+Using ---, ===, or ___ (three or more), rendered with Unicode \(em chars.
+.TP
+.B Footnotes
+Using [^id] references and [^id]: definition syntax. A footnote section is
+auto-rendered at end of document. Missing definitions are shown in italic.
+.TP
+.B YAML Frontmatter
+A block between --- lines (terminated by --- or ...) at the start of a
+document is silently stripped before rendering.
+.TP
+.B Shebang Stripping
+A leading #! line on file ingest is dropped, so executable Markdown scripts
+render cleanly.
+.SH COLOR SCHEME
+.B md2ansi
+uses a 256-colour ANSI palette for optimal terminal readability:
+.SS "Element Colors"
+.RS
+.IP "Regular text" 18
+Light gray (ANSI 38;5;7)
+.IP "Code blocks" 18
+Dark gray (ANSI 90)
+.IP "Lists" 18
+Cyan (ANSI 36)
+.IP "Links" 18
+Cyan-blue (ANSI 38;5;45) with underline
+.IP "Blockquotes" 18
+Dark background (ANSI 48;5;236)
+.IP "Horizontal rules" 18
+Cyan (ANSI 36)
+.IP "Tables (chrome)" 18
+Dark gray (ANSI 38;5;238)
+.RE
+.SS "Syntax Highlighting Colors"
+.RS
+.IP "Keywords" 18
+Pink/Magenta (ANSI 38;5;204)
+.IP "Strings" 18
+Green (ANSI 38;5;114)
+.IP "Numbers" 18
+Yellow (ANSI 38;5;220)
+.IP "Comments" 18
+Dark gray (ANSI 38;5;245)
+.IP "Functions" 18
+Cyan (ANSI 38;5;81)
+.IP "Classes" 18
+Orange (ANSI 38;5;214)
+.IP "Built-ins" 18
+Light purple (ANSI 38;5;147)
+.RE
+.SH EXAMPLES
+.SS "Basic Usage"
+View a Markdown file with ANSI colors:
+.PP
+.RS
+.nf
+md2ansi README.md
+.fi
+.RE
+.SS "With Pagination"
+.PP
+.RS
+.nf
+md2ansi README.md | less \-R
+.fi
+.RE
+.SS "From Standard Input"
+Process Markdown from a pipe or heredoc:
+.PP
+.RS
+.nf
+echo "# Hello **World**" | md2ansi
+cat document.md | md2ansi
+.fi
+.RE
+.SS "Multiple Files"
+.PP
+.RS
+.nf
+md2ansi file1.md file2.md file3.md
+.fi
+.RE
+.SS "Custom Terminal Width"
+.PP
+.RS
+.nf
+md2ansi \-\-width 100 README.md
+.fi
+.RE
+.SS "Force Colour Mode"
+.PP
+.RS
+.nf
+md2ansi \-\-color=always README.md > out.txt
+md2ansi \-\-color=never  README.md > plain.txt
+.fi
+.RE
+.SS "Debug Mode"
+.PP
+.RS
+.nf
+md2ansi \-\-debug README.md 2>debug.log
+.fi
+.RE
+.SS "Disable Specific Features"
+.PP
+.RS
+.nf
+md2ansi \-\-no\-tables \-\-no\-syntax\-highlight README.md
+.fi
+.RE
+.SS "Plain Text Mode"
+.PP
+.RS
+.nf
+md2ansi \-\-plain \-\-color=never README.md > output.txt
+.fi
+.RE
+.SS "Pipelines"
+.PP
+.RS
+.nf
+git log \-\-format=%B | md2ansi
+.fi
+.RE
+.SH SECURITY
+.B md2ansi
+includes several defences to handle untrusted input safely:
+.SS "File Size Limits"
+Maximum file size is 10MB (defined by
+.B MD_MAX_FILE_SIZE
+in
+.IR md_common.h ).
+Files larger than this are rejected with exit code 9. The stdin path has
+the same cap with fail-fast behaviour.
+.SS "No Regex Engine"
+All scanners are hand-rolled. There is no
+.BR regex (3)
+library use anywhere in the binary, eliminating ReDoS attack surface and
+giving deterministic linear-time scanning behaviour.
+.SS "Input Sanitization"
+All input is sanitised on ingest to remove ANSI escape sequences (CSI / OSC
+/ SGR), preventing terminal-injection attacks via crafted Markdown.
+.SS "Bounds Checking"
+Terminal width is clamped to [20, 500]; invalid values cause exit 22.
+Directories supplied where a file is expected are rejected with exit 4.
+Unreadable files return exit 13 with a clear error message.
+.SS "No Shell-Out"
+The binary makes no
+.BR system (3)
+calls, runs no subprocesses, creates no temporary files, and never invokes
+a shell. The entire pipeline is in-memory.
+.SH PERFORMANCE
+.B md2ansi
+is optimised for low-latency terminal viewing:
+.PP
+.RS
+Startup:     <1ms (single libc relocation + palette setup)
+.br
+Throughput:  ~5MB/sec on a typical desktop CPU
+.br
+Memory:      O(file size); a 10MB input peaks at ~25\(en30MB RSS
+.br
+File limit:  10MB
+.br
+Binary size: ~54KB dynamically linked
+.RE
+.SH ENVIRONMENT
+.TP
+.B TERM
+Terminal type. Used to detect dumb terminals (turns colour off in
+.B \-\-color=auto
+mode).
+.TP
+.B COLUMNS
+Fallback terminal width if
+.BR ioctl (TIOCGWINSZ)
+fails. If both are unavailable, defaults to 80.
+.TP
+.B NO_COLOR
+If set (to any value), disables colour output under
+.B \-\-color=auto
+mode. Honours the
+.UR https://no\-color.org
+NO_COLOR
+.UE
+convention. Overridden by an explicit
+.B \-\-color=always
+flag.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.B \-\-help
+and
+.B \-\-version
+also exit 0.
+.TP
+.B 3
+File not found.
+.TP
+.B 4
+Path is a directory.
+.TP
+.B 8
+Required option argument missing (e.g.
+.B \-\-width
+without a value).
+.TP
+.B 9
+Input exceeds 10MB size limit.
+.TP
+.B 13
+Cannot read file (permission denied).
+.TP
+.B 22
+Invalid option or argument (EINVAL).
+.SH FILES
+.TP
+.I md2ansi
+The compiled C executable. Installs by default to
+.I /usr/local/bin/md2ansi
+(root) or
+.I $HOME/.local/bin/md2ansi
+(unprivileged user).
+.TP
+.I md2ansi.1
+This manual page. Installs to
+.I $(MANDIR)/md2ansi.1
+(default
+.IR /usr/local/share/man/man1/ ).
+.TP
+.I md
+Bash pager wrapper. Delegates to
+.B md2ansi
+and pipes the output through
+.BR less (1)
+with
+.B LESS=\-FXRS
+so ANSI escapes survive and short documents auto\-exit.
+.TP
+.I mdview
+Bash browser-based preview utility. Converts Markdown to themed HTML via
+.BR pandoc (1)
+and opens it in a browser window. Recursively converts linked .md files
+with inter-file link rewriting via the bundled Lua filter
+.IR rewrite-md-links.lua .
+.TP
+.I md-link-extract
+Bash utility that extracts every URL from one or more markdown files.
+Strips UTM tracking query parameters.
+.TP
+.I ansi-info
+Bash utility that prints the 256-colour palette, SGR attributes, truecolor
+ramps, and terminal capability info.
+.TP
+.I md2ansi.bash_completion
+Bash completion for
+.BR md2ansi ", " md ", " mdview ", " md-link-extract ", and " ansi-info .
+Installs to
+.I $(COMPDIR)
+(default
+.IR /usr/local/share/bash-completion/completions/md2ansi ).
+.TP
+.I mdview.conf
+Default configuration for
+.BR mdview .
+Installs to
+.IR $(DATADIR)/mdview.conf .
+Sets default theme, window size, and browser preferences as
+.B MDVIEW_*
+variables.
+.TP
+.I themes/
+Theme directory for
+.BR mdview .
+Each theme is a pair of files
+.RI ( name .css " for page styling, " name .theme " for pandoc syntax")
+under
+.IR $(DATADIR)/themes/ .
+Bundled themes:
+.BR github-dark " (default), " github-light "."
+.SH ENVIRONMENT (mdview)
+.B mdview
+honours the following variables in addition to the core
+.B md2ansi
+environment:
+.TP
+.B MDVIEW_THEME
+Theme name (default:
+.BR github-dark ).
+Overridden by
+.BR \-t / \-\-theme .
+.TP
+.B MDVIEW_WINDOW_SIZE
+Browser window dimensions as WIDTHxHEIGHT (default: 960x1080). Overridden
+by
+.BR \-s / \-\-window-size .
+.TP
+.B MDVIEW_BROWSER
+Browser executable path. If unset,
+.B mdview
+auto-detects:
+.BR google\-chrome ", " chromium\-browser ", " chromium ", then " xdg\-open .
+Overridden by
+.BR \-b / \-\-browser .
+.TP
+.B XDG_CONFIG_HOME
+Base directory for user configuration files (default:
+.IR ~/.config ).
+.B mdview
+reads
+.I $XDG_CONFIG_HOME/mdview/mdview.conf
+if present.
+.TP
+.B XDG_DATA_HOME
+Base directory for user data files (default:
+.IR ~/.local/share ).
+.B mdview
+searches
+.I $XDG_DATA_HOME/mdview/themes/
+for user-installed themes (these take precedence over the system theme
+directory).
+.SH AUTHOR
+Written by Gary Dean (Biksu Okusi).
+.SH LICENSE
+Copyright \(co 2024\(en2026 Gary Dean
+.PP
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version.
+.PP
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details.
+.PP
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+.SH SEE ALSO
+.BR less (1),
+.BR pandoc (1),
+.BR markdown (7),
+.BR wcwidth (3),
+.BR isatty (3),
+.BR ioctl_tty (2)
