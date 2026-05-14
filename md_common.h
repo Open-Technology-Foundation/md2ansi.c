@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define MD_VERSION       "1.0.1"
+#define MD_VERSION       "1.0.2"
 #define MD_MAX_FILE_SIZE (10UL * 1024UL * 1024UL)
 
 /* Exit codes match Bash md2ansi 1.0.1 exactly. */

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-14
+
+### Changed
+
+- Documentation: simplified README title (dropped "(C Implementation)" suffix).
+- Documentation: added pointer to the pure-Bash sibling at
+  [md2ansi.bash](https://github.com/Open-Technology-Foundation/md2ansi.bash).
+- Documentation: Quick Start now includes a one-liner install
+  (`git clone … && cd … && make && sudo make install`) plus an
+  unprivileged variant using `PREFIX=$HOME/.local`.
+
+### Added
+
+- `CHANGELOG.md` following Keep a Changelog 1.1.0 format.
+
 ## [1.0.1] - 2026-05-14
 
 ### Added
@@ -44,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lists, tables, footnotes, options, security, wrapping, unicode, links, escapes,
   miscellaneous behaviour, and companion smoke tests.
 
-[Unreleased]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Open-Technology-Foundation/md2ansi.c/releases/tag/v1.0.1
 
 #fin
