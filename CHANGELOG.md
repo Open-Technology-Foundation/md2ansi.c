@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-05-29
+
+Documentation and release-tooling only; the rendered binary is byte-identical
+to 1.0.3 apart from the embedded version string.
+
 ### Added
 
 - `make release-notes` target: prints a version's `CHANGELOG.md` body for
@@ -104,7 +109,8 @@ change; rendered output is byte-identical to 1.0.2.
   lists, tables, footnotes, options, security, wrapping, unicode, links, escapes,
   miscellaneous behaviour, and companion smoke tests.
 
-[Unreleased]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Open-Technology-Foundation/md2ansi.c/releases/tag/v1.0.1

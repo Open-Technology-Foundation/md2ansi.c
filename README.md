@@ -1,6 +1,6 @@
 # MD2ANSI
 
-![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.4-blue.svg)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)
 ![Language](https://img.shields.io/badge/C-C11-orange.svg)
 ![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)
@@ -63,7 +63,7 @@ The Makefile auto-selects `PREFIX=/usr/local` for root installs and `PREFIX=$HOM
 Requires GCC or Clang with libc 2.17+ (`wcwidth` support). Builds clean under `-O2 -std=c11 -Wall -Wextra -Wpedantic -Werror`. The companion scripts additionally require **bash 5.2+**; `mdview` also requires **pandoc** and a browser (auto-detected: `google-chrome`, `chromium-browser`, `chromium`, then `xdg-open`).
 
 ```bash
-md2ansi -V             # md2ansi 1.0.3
+md2ansi -V             # md2ansi 1.0.4
 md2ansi README.md
 md README.md           # paged
 mdview README.md       # browser preview
@@ -822,6 +822,6 @@ Figures are approximate — run `make stats` for exact current values.
 
 **Status**: ✓ Production-ready C11 implementation
 
-**Version**: 1.0.3
+**Version**: 1.0.4
 
 #fin

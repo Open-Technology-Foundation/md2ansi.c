@@ -14,7 +14,7 @@ assert_contains "$out" "Usage:" "--help shows Usage" || ((fails++))
 # -V version
 out=$("$MD" -V 2>&1); rc=$?
 assert_exit_code 0 "$rc" "-V exits 0" || ((fails++))
-assert_contains "$out" "1.0.3" "version string present" || ((fails++))
+assert_contains "$out" "1.0.4" "version string present" || ((fails++))
 
 # --bogus → 22
 out=$("$MD" --bogus 2>&1); rc=$?
