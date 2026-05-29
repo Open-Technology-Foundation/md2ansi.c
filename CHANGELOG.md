@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-29
+
 ### Added
 
 - Table cell wrapping: overlong tables are now word-wrapped to the terminal
@@ -121,7 +123,8 @@ change; rendered output is byte-identical to 1.0.2.
   lists, tables, footnotes, options, security, wrapping, unicode, links, escapes,
   miscellaneous behaviour, and companion smoke tests.
 
-[Unreleased]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Open-Technology-Foundation/md2ansi.c/compare/v1.0.1...v1.0.2
