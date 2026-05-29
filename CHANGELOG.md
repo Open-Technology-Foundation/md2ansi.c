@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `make release-notes` target: prints a version's `CHANGELOG.md` body for
+  `gh release create --notes-file`, bounded on the next version heading, the
+  link-reference footer, or `#fin` (correct even for the last section).
+
+### Changed
+
+- Documentation: added a Releasing section describing the CHANGELOG-driven
+  release flow; refreshed project-size figures (now approximate, with pointers
+  to `make stats`) and corrected stale test-count references.
+
 ## [1.0.3] - 2026-05-29
 
 Robustness and maintainability hardening from a full code review. No CLI-surface
