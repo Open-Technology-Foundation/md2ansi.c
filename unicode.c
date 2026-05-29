@@ -1,5 +1,6 @@
 /* unicode.c - UTF-8 + wcwidth */
 #include "unicode.h"
+#include "md_common.h"
 
 #include <locale.h>
 #include <wchar.h>
@@ -34,8 +35,13 @@ size_t md_utf8_decode(const char *src, size_t len, uint32_t *cp) {
         if ((b & 0xc0) != 0x80) { *cp = 0xfffd; return 1; }
         v = (v << 6) | (uint32_t)(b & 0x3f);
     }
-    /* Reject surrogates & overlongs for the common cases */
+    /* Reject surrogates, overlong encodings, and out-of-range (> U+10FFFF):
+     * emit U+FFFD. Malformed input never crashes the renderer and the decoder
+     * always advances >= 1 byte, so no scanner can loop on bad bytes. */
+    static const uint32_t mincp[5] = { 0, 0, 0x80, 0x800, 0x10000 };
+    if (v < mincp[need])            { *cp = 0xfffd; return need; }
     if (v >= 0xd800 && v <= 0xdfff) { *cp = 0xfffd; return need; }
+    if (v > 0x10ffff)               { *cp = 0xfffd; return need; }
     *cp = v;
     return need;
 }
@@ -51,30 +57,7 @@ size_t md_visible_width(const char *src, size_t len) {
     size_t i = 0, total = 0;
     while (i < len) {
         unsigned char c = (unsigned char)src[i];
-        if (c == 0x1b) {
-            /* Skip ANSI escape. */
-            if (i + 1 >= len) { i++; continue; }
-            unsigned char n = (unsigned char)src[i + 1];
-            if (n == '[') {
-                i += 2;
-                while (i < len) {
-                    unsigned char x = (unsigned char)src[i++];
-                    if (x >= 0x40 && x <= 0x7e) break;
-                }
-            } else if (n == ']') {
-                i += 2;
-                while (i < len) {
-                    unsigned char x = (unsigned char)src[i];
-                    if (x == 0x07) { i++; break; }
-                    if (x == 0x1b && i + 1 < len
-                        && (unsigned char)src[i + 1] == '\\') { i += 2; break; }
-                    i++;
-                }
-            } else {
-                i += 2;
-            }
-            continue;
-        }
+        if (c == 0x1b) { i = md_ansi_skip(src, i, len); continue; }
         uint32_t cp;
         size_t adv = md_utf8_decode(src + i, len - i, &cp);
         if (adv == 0) break;

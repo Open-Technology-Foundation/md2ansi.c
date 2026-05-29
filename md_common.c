@@ -2,7 +2,9 @@
 #include "md_common.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -94,7 +96,10 @@ void md_buf_reserve(md_buf_t *b, size_t additional) {
     size_t need = b->len + additional + 1;
     if (need <= b->cap) return;
     size_t newcap = b->cap ? b->cap : 64;
-    while (newcap < need) newcap *= 2;
+    while (newcap < need) {
+        if (newcap > SIZE_MAX / 2) { newcap = need; break; } /* clamp: no overflow */
+        newcap *= 2;
+    }
     char *p = realloc(b->data, newcap);
     if (!p) md_die(MD_EX_INVAL, "out of memory");
     b->data = p;
@@ -177,24 +182,41 @@ void md_split_lines(const char *src, size_t src_len, md_lines_t *out) {
 /* ----- slurpers ----- */
 
 char *md_slurp_file(const char *path, size_t max_bytes, size_t *out_len) {
+    /* Open first, then fstat the SAME descriptor: one inode observed through
+     * the size/type checks and the read, so a hostile symlink swap between
+     * checks (TOCTOU) cannot bypass the directory rejection or size cap. */
+    int fd = open(path, O_RDONLY | O_NOCTTY);
+    if (fd < 0) {
+        if (errno == ENOENT || errno == ENOTDIR) {
+            md_die(MD_EX_NOTFOUND, "File not found '%s'", path);
+        }
+        if (errno == EACCES) {
+            md_die(MD_EX_NOREAD, "Cannot read file '%s'", path);
+        }
+        md_die(MD_EX_NOREAD, "Cannot open '%s': %s", path, strerror(errno));
+    }
+
     struct stat st;
-    if (stat(path, &st) != 0) {
-        md_die(MD_EX_NOTFOUND, "File not found '%s'", path);
+    if (fstat(fd, &st) != 0) {
+        int e = errno; close(fd);
+        md_die(MD_EX_NOREAD, "Cannot stat '%s': %s", path, strerror(e));
     }
     if (S_ISDIR(st.st_mode)) {
+        close(fd);
         md_die(MD_EX_ISDIR, "'%s' is a directory, not a file", path);
     }
-    if (access(path, R_OK) != 0) {
-        md_die(MD_EX_NOREAD, "Cannot read file '%s'", path);
-    }
     if ((size_t)st.st_size > max_bytes) {
+        close(fd);
         md_die(MD_EX_TOOBIG,
                "File too large: %lld bytes (maximum: %zu bytes / 10MB)",
                (long long)st.st_size, max_bytes);
     }
 
-    FILE *fp = fopen(path, "rb");
-    if (!fp) md_die(MD_EX_NOREAD, "Cannot open '%s': %s", path, strerror(errno));
+    FILE *fp = fdopen(fd, "rb");
+    if (!fp) {
+        int e = errno; close(fd);
+        md_die(MD_EX_NOREAD, "Cannot open '%s': %s", path, strerror(e));
+    }
 
     size_t n = (size_t)st.st_size;
     char  *buf = malloc(n + 1);
@@ -207,33 +229,46 @@ char *md_slurp_file(const char *path, size_t max_bytes, size_t *out_len) {
     return buf;
 }
 
+size_t md_ansi_skip(const char *s, size_t i, size_t len) {
+    /* Caller guarantees s[i] == 0x1b (ESC). */
+    if (i + 1 >= len) return i + 1; /* lone trailing ESC */
+    unsigned char n = (unsigned char)s[i + 1];
+    if (n == '[') {
+        /* CSI: skip until final byte 0x40-0x7e */
+        i += 2;
+        while (i < len) {
+            unsigned char x = (unsigned char)s[i++];
+            if (x >= 0x40 && x <= 0x7e) break;
+        }
+        return i;
+    }
+    if (n == ']' || n == 'P' || n == '_' || n == '^' || n == 'X') {
+        /* String controls: OSC(]) DCS(P) APC(_) PM(^) SOS(X).
+         * Terminated by BEL (0x07) or ST (ESC \). */
+        i += 2;
+        while (i < len) {
+            unsigned char x = (unsigned char)s[i];
+            if (x == 0x07) return i + 1;
+            if (x == 0x1b && i + 1 < len && (unsigned char)s[i + 1] == '\\') {
+                return i + 2;
+            }
+            i++;
+        }
+        return i;
+    }
+    /* Two-byte escape */
+    return i + 2;
+}
+
 size_t md_strip_ansi_inplace(char *buf, size_t len) {
     size_t out = 0;
     size_t i = 0;
     while (i < len) {
         unsigned char c = (unsigned char)buf[i];
         if (c != 0x1b) { buf[out++] = (char)c; i++; continue; }
-        if (i + 1 >= len) { i++; continue; }
-        unsigned char n = (unsigned char)buf[i + 1];
-        if (n == '[') {
-            i += 2;
-            while (i < len) {
-                unsigned char x = (unsigned char)buf[i++];
-                if (x >= 0x40 && x <= 0x7e) break;
-            }
-        } else if (n == ']') {
-            i += 2;
-            while (i < len) {
-                unsigned char x = (unsigned char)buf[i];
-                if (x == 0x07) { i++; break; }
-                if (x == 0x1b && i + 1 < len
-                    && (unsigned char)buf[i + 1] == '\\') { i += 2; break; }
-                i++;
-            }
-        } else {
-            i += 2;
-        }
+        i = md_ansi_skip(buf, i, len);
     }
+    buf[out] = '\0'; /* re-terminate: safe, out <= len < cap */
     return out;
 }
 

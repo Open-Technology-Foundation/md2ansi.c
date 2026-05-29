@@ -75,5 +75,14 @@ char *md_slurp_stdin(size_t max_bytes, size_t *out_len);
 /* Strip ANSI escape sequences in-place from buf[0..len). Returns new length. */
 size_t md_strip_ansi_inplace(char *buf, size_t len);
 
+/* Given s[i] == 0x1b (ESC), return the index just past the escape sequence.
+ * The single source of truth for the CSI / OSC / string-control / two-byte
+ * escape walker shared by every ANSI strip + width routine. Handles:
+ *   ESC [ <params> <final 0x40..0x7e>     (CSI)
+ *   ESC ] | P | _ | ^ | X <data> BEL|ST   (OSC, DCS, APC, PM, SOS)
+ *   ESC <single byte>                      (two-byte escape)
+ * A lone trailing ESC advances by one. Never reads past `len`. */
+size_t md_ansi_skip(const char *s, size_t i, size_t len);
+
 #endif /* MD_COMMON_H */
 /*fin*/

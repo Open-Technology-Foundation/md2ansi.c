@@ -1,6 +1,7 @@
 /* ansi.c - terminal detection, color palette, ANSI stripping */
 #include "ansi.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -76,8 +77,10 @@ int md_color_decide(md_color_mode_t mode) {
     if (mode == MD_COLOR_ALWAYS) return 1;
 
     /* AUTO */
-    const char *nc = getenv("NO_COLOR");
-    if (nc && *nc) return 0;
+    /* NO_COLOR spec (no-color.org): ANY presence — including an empty value —
+     * disables color. The Bash sibling has no NO_COLOR handling, so there is
+     * no parity constraint here; follow the spec. */
+    if (getenv("NO_COLOR") != NULL) return 0;
 
     /* Match Bash: (stdout TTY AND stderr TTY) OR (TERM set and != "dumb").
      * The TERM fallback enables color when output is piped to a color-aware
@@ -101,8 +104,12 @@ int md_term_width(void) {
     } else {
         const char *cols = getenv("COLUMNS");
         if (cols && *cols) {
-            int v = atoi(cols);
-            if (v > 0) w = v;
+            char *end;
+            errno = 0;
+            long v = strtol(cols, &end, 10);
+            if (errno == 0 && end != cols && *end == '\0' && v > 0 && v <= 500) {
+                w = (int)v;
+            }
         }
     }
     if (w == 0) w = 80;
@@ -111,11 +118,9 @@ int md_term_width(void) {
     return w;
 }
 
-/* Strip CSI / OSC / other ESC sequences. We handle:
- *   ESC [ <params> <final>        (CSI; final in 0x40..0x7e)
- *   ESC ] ... BEL                 (OSC, terminated by BEL or ESC \)
- *   ESC <single byte>             (two-char escape)
- * Anything else: the ESC itself is dropped, following byte preserved. */
+/* Strip CSI / OSC / DCS / APC / PM / SOS / two-byte ESC sequences. The escape
+ * walker itself lives in md_ansi_skip() (md_common.c) so every strip + width
+ * routine shares one implementation. Here we just copy non-ESC bytes through. */
 void md_strip_ansi(const char *src, size_t len, md_buf_t *out) {
     size_t i = 0;
     while (i < len) {
@@ -125,32 +130,7 @@ void md_strip_ansi(const char *src, size_t len, md_buf_t *out) {
             i++;
             continue;
         }
-        /* ESC */
-        if (i + 1 >= len) { i++; continue; }
-        unsigned char n = (unsigned char)src[i + 1];
-        if (n == '[') {
-            /* CSI: skip until final byte 0x40-0x7e */
-            i += 2;
-            while (i < len) {
-                unsigned char x = (unsigned char)src[i];
-                i++;
-                if (x >= 0x40 && x <= 0x7e) break;
-            }
-        } else if (n == ']') {
-            /* OSC: skip until BEL (0x07) or ESC\ (0x1b 0x5c) */
-            i += 2;
-            while (i < len) {
-                unsigned char x = (unsigned char)src[i];
-                if (x == 0x07) { i++; break; }
-                if (x == 0x1b && i + 1 < len && (unsigned char)src[i + 1] == '\\') {
-                    i += 2; break;
-                }
-                i++;
-            }
-        } else {
-            /* Two-byte escape */
-            i += 2;
-        }
+        i = md_ansi_skip(src, i, len);
     }
 }
 
@@ -160,28 +140,7 @@ size_t md_visible_bytes(const char *src, size_t len) {
     while (i < len) {
         unsigned char c = (unsigned char)src[i];
         if (c != 0x1b) { n++; i++; continue; }
-        if (i + 1 >= len) { i++; continue; }
-        unsigned char nb = (unsigned char)src[i + 1];
-        if (nb == '[') {
-            i += 2;
-            while (i < len) {
-                unsigned char x = (unsigned char)src[i];
-                i++;
-                if (x >= 0x40 && x <= 0x7e) break;
-            }
-        } else if (nb == ']') {
-            i += 2;
-            while (i < len) {
-                unsigned char x = (unsigned char)src[i];
-                if (x == 0x07) { i++; break; }
-                if (x == 0x1b && i + 1 < len && (unsigned char)src[i + 1] == '\\') {
-                    i += 2; break;
-                }
-                i++;
-            }
-        } else {
-            i += 2;
-        }
+        i = md_ansi_skip(src, i, len);
     }
     return n;
 }

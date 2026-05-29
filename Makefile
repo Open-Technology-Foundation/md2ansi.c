@@ -1,6 +1,11 @@
 # Makefile - C reimplementation of md2ansi
 CC      ?= cc
-CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic -Werror -D_XOPEN_SOURCE=700
+# Optimization level is user-tunable (e.g. `make OPT=-O3`). The remaining flags
+# are mandatory and force-appended via `override`, so `make CFLAGS=...` can add
+# flags without dropping -D_XOPEN_SOURCE=700 (which would break -Werror on
+# wcwidth/strcasecmp via implicit-declaration warnings).
+OPT     ?= -O2
+override CFLAGS += $(OPT) -std=c11 -Wall -Wextra -Wpedantic -Werror -D_XOPEN_SOURCE=700
 
 # Install tier: root -> system-wide; non-root -> user-local.
 # Override either explicitly:  make PREFIX=/opt/local install
@@ -31,7 +36,7 @@ OBJS         := md_common.o ansi.o unicode.o parser.o inline.o render.o table.o 
 HDRS         := md_common.h ansi.h unicode.h parser.h inline.h render.h table.h syntax.h
 
 .PHONY: all install install-bin install-companions install-man install-comp install-data install-themes \
-        uninstall check test clean help
+        uninstall check test clean stats help
 
 all: $(BIN)
 
@@ -101,6 +106,13 @@ test: $(BIN)
 clean:
 	rm -f $(BIN) $(OBJS)
 
+stats:
+	@printf 'Source code: %s lines (C + headers)\n' "$$(cat $(srcdir)*.c $(srcdir)*.h | wc -l)"
+	@printf 'Test suite:  %s lines across %s test files (+ runner + utils)\n' \
+	  "$$(cat $(srcdir)tests/*.sh | wc -l)" "$$(ls $(srcdir)tests/test-*.sh | wc -l)"
+	@printf 'Binary:      %s bytes\n' \
+	  "$$(wc -c < $(srcdir)$(BIN) 2>/dev/null || echo '? (run make first)')"
+
 help:
 	@echo 'Usage: make [target]'
 	@echo ''
@@ -117,9 +129,11 @@ help:
 	@echo '  check              Verify installed binaries are on PATH'
 	@echo '  test               Run test suite'
 	@echo '  clean              Remove build artifacts'
+	@echo '  stats              Print source/test LOC + binary size'
 	@echo '  help               Show this message'
 	@echo ''
 	@echo 'Variables:'
+	@echo '  OPT      = $(OPT)'
 	@echo '  PREFIX   = $(PREFIX)'
 	@echo '  BINDIR   = $(BINDIR)'
 	@echo '  MANDIR   = $(MANDIR)'

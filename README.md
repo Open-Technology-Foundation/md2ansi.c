@@ -441,11 +441,11 @@ md2ansi.c/
     └── fixtures/            # input + expected golden files
 ```
 
-**Total project size:**
+**Total project size** (run `make stats` for exact current figures):
 
-- Source code: 2,952 lines (9 modules + headers + main)
-- Test suite: 649 lines (11 test files + runner + utils)
-- Binary: ~54KB (dynamically linked to libc only)
+- Source code: ~2,950 lines (9 modules + headers + main)
+- Test suite: ~1,000 lines (14 test files + runner + utils)
+- Binary: ~57KB (dynamically linked to libc only)
 
 ### Module Responsibilities
 
