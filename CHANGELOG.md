@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Table cell wrapping: overlong tables are now word-wrapped to the terminal
+  width by default. Column budgets use max-min fair-share ("water-filling")
+  so narrow columns keep their natural width and wide columns absorb the
+  shrink; the existing single-line layout is preserved byte-for-byte whenever
+  the table already fits (or wrapping is disabled). This is a documented
+  divergence from the Bash sibling, which always overflows.
+- `--no-table-wrap` flag (also implied by `--plain`/`-t`): keeps the natural
+  table layout and lets wide tables overflow the right margin, matching the
+  pre-wrap behaviour.
+
 ## [1.0.4] - 2026-05-29
 
 Documentation and release-tooling only; the rendered binary is byte-identical

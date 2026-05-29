@@ -3,10 +3,15 @@
 #include "inline.h"
 #include "ansi.h"
 #include "unicode.h"
+#include "render.h"  /* md_wrap_text (cell wrapping) */
 
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Smallest content width a wrapped column may shrink to. Below this the table
+ * is too narrow to wrap usefully and we fall back to overflow. */
+#define MIN_COL_WIDTH 3
 
 /* Box-drawing UTF-8 sequences */
 #define BD_H   "\xe2\x94\x80"  /* ─ */
@@ -233,11 +238,126 @@ static void emit_border(FILE *fp, const size_t *widths, size_t cols,
     fputc('\n', fp);
 }
 
+/* Count the '\n'-terminated lines md_wrap_text wrote into `b`. */
+static size_t buf_line_count(const md_buf_t *b) {
+    size_t n = 0;
+    for (size_t i = 0; i < b->len; i++) if (b->data[i] == '\n') n++;
+    return n;
+}
+
+/* Locate the k-th '\n'-terminated line in `b`. On success returns 1 and sets
+ * out/outlen to the line slice (newline excluded); returns 0 when k is past
+ * the last line, leaving out/outlen untouched. */
+static int buf_line(const md_buf_t *b, size_t k,
+                    const char **out, size_t *outlen) {
+    size_t start = 0, idx = 0;
+    for (size_t i = 0; i < b->len; i++) {
+        if (b->data[i] == '\n') {
+            if (idx == k) { *out = b->data + start; *outlen = i - start; return 1; }
+            idx++;
+            start = i + 1;
+        }
+    }
+    return 0;
+}
+
+/* Shrink `widths[]` so the rendered table fits within `max_width` columns,
+ * using max-min fair-share ("water-filling"): columns no wider than the fair
+ * share keep their natural width; the residual budget is split evenly across
+ * the remaining wide columns (first `residual % flex` get +1). Returns 1 when
+ * the table should be wrapped, 0 to keep the natural (overflow) layout. */
+static int budget_columns(size_t *widths, size_t cols, int max_width) {
+    if (max_width <= 0) return 0;
+    /* Row width = leading │ + per col (space + content + space + │).
+     * Content budget B = max_width - 1 - 3*cols. */
+    long budget = (long)max_width - 1 - 3L * (long)cols;
+    if (budget <= 0) return 0;
+
+    size_t natural_sum = 0;
+    for (size_t c = 0; c < cols; c++) natural_sum += widths[c];
+    if (natural_sum <= (size_t)budget) return 0;          /* already fits */
+    if (cols * MIN_COL_WIDTH > (size_t)budget) return 0;  /* too narrow to wrap */
+
+    unsigned char *fixed = calloc(cols, 1);
+    if (!fixed) md_die(MD_EX_INVAL, "out of memory");
+    size_t cap = (size_t)budget;
+    for (;;) {
+        size_t flex = 0, fixed_sum = 0;
+        for (size_t c = 0; c < cols; c++) {
+            if (fixed[c]) fixed_sum += widths[c]; else flex++;
+        }
+        if (flex == 0 || fixed_sum >= cap) break;
+        size_t avail = cap - fixed_sum;
+        size_t fair  = avail / flex;
+        int found = 0;
+        for (size_t c = 0; c < cols; c++) {
+            if (!fixed[c] && widths[c] <= fair) { fixed[c] = 1; found = 1; }
+        }
+        if (!found) {
+            size_t rem = avail % flex, i = 0;
+            for (size_t c = 0; c < cols; c++) {
+                if (!fixed[c]) widths[c] = fair + (i++ < rem ? 1 : 0);
+            }
+            break;
+        }
+    }
+    free(fixed);
+    return 1;
+}
+
+/* Emit one row of data as a single physical line (natural/overflow layout). */
+static void emit_row_single(FILE *fp, const md_table_t *t, size_t r,
+                            const size_t *widths,
+                            const md_inline_ctx_t *ictx, md_buf_t *exp) {
+    fputs(md_pal.table, fp);
+    fputs(BD_V, fp);
+    for (size_t c = 0; c < t->col_count; c++) {
+        const char *cell = t->cells[r * t->col_count + c];
+        md_inline_expand(cell, strlen(cell), ictx, exp);
+        fputc(' ', fp);
+        emit_aligned_cell(fp, exp->data, exp->len, widths[c], t->aligns[c]);
+        fputc(' ', fp);
+        fputs(BD_V, fp);
+    }
+    fputs(md_pal.reset, fp);
+    fputc('\n', fp);
+}
+
+/* Emit one row of data wrapped to `widths[]`, spanning as many physical lines
+ * as the tallest wrapped cell. `colb` is a reusable per-column scratch array. */
+static void emit_row_wrapped(FILE *fp, const md_table_t *t, size_t r,
+                             const size_t *widths,
+                             const md_inline_ctx_t *ictx,
+                             md_buf_t *exp, md_buf_t *colb) {
+    size_t row_h = 1;
+    for (size_t c = 0; c < t->col_count; c++) {
+        const char *cell = t->cells[r * t->col_count + c];
+        md_inline_expand(cell, strlen(cell), ictx, exp);
+        md_wrap_text(exp->data, exp->len, (int)widths[c], &colb[c]);
+        size_t n = buf_line_count(&colb[c]);
+        if (n > row_h) row_h = n;
+    }
+    for (size_t k = 0; k < row_h; k++) {
+        fputs(md_pal.table, fp);
+        fputs(BD_V, fp);
+        for (size_t c = 0; c < t->col_count; c++) {
+            const char *lp = ""; size_t ll = 0;
+            buf_line(&colb[c], k, &lp, &ll);  /* empty slice past cell end */
+            fputc(' ', fp);
+            emit_aligned_cell(fp, lp, ll, widths[c], t->aligns[c]);
+            fputc(' ', fp);
+            fputs(BD_V, fp);
+        }
+        fputs(md_pal.reset, fp);
+        fputc('\n', fp);
+    }
+}
+
 void md_table_render(const md_table_t *t, FILE *fp,
-                     const md_inline_ctx_t *ictx) {
+                     const md_inline_ctx_t *ictx, int max_width) {
     if (t->row_count == 0 || t->col_count == 0) return;
 
-    /* Compute per-column widths using inline-expanded visible width */
+    /* Compute per-column natural widths using inline-expanded visible width */
     size_t *widths = calloc(t->col_count, sizeof *widths);
     if (!widths) md_die(MD_EX_INVAL, "out of memory");
 
@@ -249,23 +369,25 @@ void md_table_render(const md_table_t *t, FILE *fp,
             if (w > widths[c]) widths[c] = w;
         }
     }
+    md_buf_free(&scratch);
+
+    /* Fit to terminal width when budgeted; otherwise keep natural layout.
+     * Borders use the (possibly shrunk) widths so chrome stays aligned. */
+    int wrap = budget_columns(widths, t->col_count, max_width);
 
     emit_border(fp, widths, t->col_count, BD_TL, BD_TT, BD_TR);
 
     md_buf_t exp; md_buf_init(&exp);
+    md_buf_t *colb = NULL;
+    if (wrap) {
+        colb = calloc(t->col_count, sizeof *colb);
+        if (!colb) md_die(MD_EX_INVAL, "out of memory");
+        for (size_t c = 0; c < t->col_count; c++) md_buf_init(&colb[c]);
+    }
+
     for (size_t r = 0; r < t->row_count; r++) {
-        fputs(md_pal.table, fp);
-        fputs(BD_V, fp);
-        for (size_t c = 0; c < t->col_count; c++) {
-            const char *cell = t->cells[r * t->col_count + c];
-            md_inline_expand(cell, strlen(cell), ictx, &exp);
-            fputc(' ', fp);
-            emit_aligned_cell(fp, exp.data, exp.len, widths[c], t->aligns[c]);
-            fputc(' ', fp);
-            fputs(BD_V, fp);
-        }
-        fputs(md_pal.reset, fp);
-        fputc('\n', fp);
+        if (wrap) emit_row_wrapped(fp, t, r, widths, ictx, &exp, colb);
+        else      emit_row_single(fp, t, r, widths, ictx, &exp);
 
         /* Header separator after row 0 if alignment was present */
         if (r == 0 && t->has_alignment) {
@@ -273,8 +395,12 @@ void md_table_render(const md_table_t *t, FILE *fp,
         }
     }
     emit_border(fp, widths, t->col_count, BD_BL, BD_BT, BD_BR);
+
+    if (colb) {
+        for (size_t c = 0; c < t->col_count; c++) md_buf_free(&colb[c]);
+        free(colb);
+    }
     md_buf_free(&exp);
-    md_buf_free(&scratch);
     free(widths);
 }
 

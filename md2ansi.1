@@ -81,6 +81,12 @@ special formatting.
 .B \-\-no\-bare\-urls
 Disable autolinking of bare http(s):// URLs in text. Angle autolinks and
 explicit `[text](url)` still render normally.
+.TP
+.B \-\-no\-table\-wrap
+Disable wrapping of overlong table cells. By default, when a table's natural
+width exceeds the terminal width, wide columns are word-wrapped so the table
+fits; with this option the table is laid out at its natural width and may
+overflow the right margin (matching the Bash implementation).
 .SS "Other Options"
 .TP
 .B \-\-
@@ -176,6 +182,10 @@ Inline formatting within cells (bold, italic, code, links)
 Backslash-escaped pipes (\\|) preserved as literal content
 .IP \(bu 2
 Backtick-wrapped pipes (`a|b`) preserved as literal content
+.IP \(bu 2
+Overlong cells word-wrapped to fit the terminal width (disable with
+.BR \-\-no\-table\-wrap ).
+A single token wider than its column budget still overflows that column.
 .RE
 .SS "Code Blocks"
 .TP

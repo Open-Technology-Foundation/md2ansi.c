@@ -51,6 +51,41 @@ output=$(printf '| col |\n|-----|\n| see `\\|` here |\n' | "$MD" --color=always)
 assert_contains     "$output" '\|'  "backslash-pipe inside backticks preserved literally" || ((fails++))
 assert_not_contains "$output" 'see `|` here' "backslash NOT stripped from inside-backtick \\|" || ((fails++))
 
+# Overlong cell wraps to a forced narrow terminal width (--width 40).
+# --color=never emits structural box-drawing only (no ANSI), so `wc -L` under
+# a UTF-8 locale measures true display columns directly.
+wide=$'| Module | Responsibility |\n|--------|----------------|\n| render | This is a very long responsibility description that must exceed forty columns and therefore wrap across multiple physical lines |\n'
+wrapped=$(printf '%s' "$wide" | "$MD" --color=never --width 40)
+nowrap=$(printf '%s' "$wide" | "$MD" --color=never --width 40 --no-table-wrap)
+
+max_w=$(printf '%s\n' "$wrapped" | LC_ALL=C.UTF-8 wc -L)
+if ((max_w <= 40)); then
+  printf '%s✓ pass%s: wrapped table fits 40 cols (max=%s)\n' "$GREEN" "$NC" "$max_w"
+else
+  printf '%s✗ fail%s: wrapped table exceeds 40 cols (max=%s)\n' "$RED" "$NC" "$max_w"; ((fails+=1))
+fi
+
+assert_contains "$wrapped" "responsibility" "long cell content preserved when wrapped" || ((fails++))
+
+lines_wrapped=$(printf '%s\n' "$wrapped" | wc -l)
+lines_nowrap=$(printf '%s\n' "$nowrap" | wc -l)
+if ((lines_wrapped > lines_nowrap)); then
+  printf '%s✓ pass%s: wrapped cell spans multiple physical lines (%s > %s)\n' \
+    "$GREEN" "$NC" "$lines_wrapped" "$lines_nowrap"
+else
+  printf '%s✗ fail%s: wrapped cell did not add physical lines (%s vs %s)\n' \
+    "$RED" "$NC" "$lines_wrapped" "$lines_nowrap"; ((fails+=1))
+fi
+
+# --no-table-wrap preserves the overflow path: wide line not split.
+max_nw=$(printf '%s\n' "$nowrap" | LC_ALL=C.UTF-8 wc -L)
+if ((max_nw > 40)); then
+  printf '%s✓ pass%s: --no-table-wrap preserves overflow (max=%s)\n' "$GREEN" "$NC" "$max_nw"
+else
+  printf '%s✗ fail%s: --no-table-wrap unexpectedly fit width (max=%s)\n' "$RED" "$NC" "$max_nw"; ((fails+=1))
+fi
+assert_contains "$nowrap" "responsibility" "content intact under --no-table-wrap" || ((fails++))
+
 ((fails == 0)) && { echo "All table tests passed."; exit 0; }
 echo "$fails table tests failed."
 exit 1

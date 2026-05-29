@@ -422,7 +422,8 @@ void md_render(const md_doc_t *doc, const md_render_opts_t *opts, FILE *fp) {
             } else {
                 md_table_t tbl;
                 md_table_parse(&b->lines, &tbl);
-                md_table_render(&tbl, fp, &ictx);
+                md_table_render(&tbl, fp, &ictx,
+                                opts->no_table_wrap ? 0 : opts->width);
                 md_table_free(&tbl);
             }
             break;

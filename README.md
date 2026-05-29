@@ -175,6 +175,7 @@ Installed by `make install`. Data files for `mdview` (theme CSS + `.theme` pando
 - ✓ Box-drawing borders (`─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼`)
 - ✓ Backslash-escaped pipes (`\|`) preserved as literal content
 - ✓ Backtick-wrapped pipes (`` `--mode=a|b|c` ``) preserved as literal content
+- ✓ Overlong cells word-wrapped to fit the terminal width (disable with `--no-table-wrap`)
 
 **Code Blocks:**
 
@@ -199,7 +200,7 @@ Installed by `make install`. Data files for `mdview` (theme CSS + `.theme` pando
 
 - ✓ ANSI-aware text wrapping
 - ✓ Terminal width auto-detection via `TIOCGWINSZ` → `$COLUMNS` → `80`, clamped `[20, 500]`
-- ✓ Per-feature toggles (`--no-tables`, `--no-syntax-highlight`, `--no-tasks`, `--no-images`, `--no-links`, `--no-footnotes`, `--no-bare-urls`)
+- ✓ Per-feature toggles (`--no-tables`, `--no-syntax-highlight`, `--no-tasks`, `--no-images`, `--no-links`, `--no-footnotes`, `--no-bare-urls`, `--no-table-wrap`)
 - ✓ Plain mode (`--plain` / `-t`) disables all feature toggles
 - ✓ Debug mode (`--debug` / `-D`) with timestamped sequential traces to stderr
 
@@ -234,6 +235,7 @@ md2ansi --no-task-lists         # render task items as regular bullets
 md2ansi --no-images             # show literal ![alt](url)
 md2ansi --no-links              # show literal [text](url)
 md2ansi --no-bare-urls          # don't auto-link bare http(s):// URLs
+md2ansi --no-table-wrap         # let wide tables overflow instead of wrapping
 ```
 
 ### Exit Codes
@@ -368,6 +370,7 @@ The frontmatter block (between `---` lines, terminated by `---` or `...`) is sil
 |:-----|:----------|
 | Table borders | Unicode box-drawing `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼` |
 | Table chrome color | Three explicit levels: cell content `38;5;7` > inline `code` `90` > chrome `38;5;238` (borders/padding) |
+| Overlong table cells | Word-wrapped to the terminal width by default (max-min fair-share column budgeting); `--no-table-wrap` keeps the natural layout and overflows. **Divergence from Bash:** the Bash version never wraps and always overflows. |
 | Horizontal rules | Rendered with `─` chars |
 | Bold/italic inside `` `code` `` | Suppressed (literal) inside code spans |
 | Trailing `\033[0m` | One reset at end of stream |
@@ -728,6 +731,8 @@ A: Possibly. Current bottleneck is per-line `md_buf_t` allocation in inline expa
 | **Math** (`$...$`, `$$...$$`) | Not supported | Use a dedicated math renderer for math docs |
 | **Definition lists** (`term : def`) | Not implemented | Use bullet lists instead |
 | **Multi-line table cells** | Not supported | Each row must fit on one source line |
+| **Overlong unbreakable token in a wrapped cell** | A single token wider than its column budget still overflows that column (word-wrap only) | Shorten the token, or use `--no-table-wrap` |
+| **Inline emphasis across a cell wrap boundary** | `**bold**` spanning a wrapped line loses styling on the continuation line (no SGR-state tracker) | Keep emphasised runs short; impact is minor on prose-heavy cells |
 | **OSC 8 terminal hyperlinks** | Not emitted | Use a richer terminal (kitty, wezterm) with built-in URL handling |
 | **Syntax highlighter multi-line strings** | Single-line tokenizer only | None |
 | **Setext headers** (`====` underline) | Not implemented | Use ATX `#` headers |

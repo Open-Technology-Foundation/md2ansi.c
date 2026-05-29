@@ -22,6 +22,7 @@ typedef struct {
     int  no_images;
     int  no_links;
     int  bare_urls;              /* default 1; --no-bare-urls → 0 */
+    int  no_table_wrap;          /* default 0; --no-table-wrap → 1 */
     md_color_mode_t color_mode;
     /* file list */
     char **files;
@@ -59,6 +60,7 @@ static void show_help(void) {
 "  --no-images             Disable image placeholders\n"
 "  --no-links              Disable link formatting\n"
 "  --no-bare-urls          Disable bare URL autolinking (http://, https://)\n"
+"  --no-table-wrap         Disable wrapping overlong table cells to terminal width\n"
 "\n"
 "Examples:\n"
 "  %s README.md | less -R          # view with pager\n"
@@ -85,6 +87,7 @@ static void apply_plain(md_cli_opts_t *o) {
     o->no_images    = 1;
     o->no_links     = 1;
     o->bare_urls    = 0;
+    o->no_table_wrap = 1;
 }
 
 static const char *prog_basename(const char *argv0) {
@@ -101,6 +104,7 @@ enum {
     OPT_NO_IMAGES,
     OPT_NO_LINKS,
     OPT_NO_BARE_URLS,
+    OPT_NO_TABLE_WRAP,
     OPT_COLOR
 };
 
@@ -118,6 +122,7 @@ static void parse_cli(int argc, char **argv, md_cli_opts_t *o) {
         { "no-images",           no_argument,       0, OPT_NO_IMAGES },
         { "no-links",            no_argument,       0, OPT_NO_LINKS },
         { "no-bare-urls",        no_argument,       0, OPT_NO_BARE_URLS },
+        { "no-table-wrap",       no_argument,       0, OPT_NO_TABLE_WRAP },
         { "color",               required_argument, 0, OPT_COLOR },
         { 0, 0, 0, 0 }
     };
@@ -149,6 +154,7 @@ static void parse_cli(int argc, char **argv, md_cli_opts_t *o) {
         case OPT_NO_IMAGES:    o->no_images    = 1; break;
         case OPT_NO_LINKS:     o->no_links     = 1; break;
         case OPT_NO_BARE_URLS: o->bare_urls    = 0; break;
+        case OPT_NO_TABLE_WRAP: o->no_table_wrap = 1; break;
         case OPT_COLOR:
             if      (strcmp(optarg, "auto")   == 0) o->color_mode = MD_COLOR_AUTO;
             else if (strcmp(optarg, "always") == 0) o->color_mode = MD_COLOR_ALWAYS;
@@ -225,7 +231,8 @@ int main(int argc, char **argv) {
         .no_tasks     = o.no_tasks,
         .no_images    = o.no_images,
         .no_links     = o.no_links,
-        .bare_urls    = o.bare_urls
+        .bare_urls    = o.bare_urls,
+        .no_table_wrap = o.no_table_wrap
     };
 
     md_debugf("width=%d color=%d files=%d",

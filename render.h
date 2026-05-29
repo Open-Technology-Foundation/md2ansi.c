@@ -15,6 +15,7 @@ typedef struct {
     int no_images;
     int no_links;
     int bare_urls;
+    int no_table_wrap;
 } md_render_opts_t;
 
 /* Render document to stdout. */
