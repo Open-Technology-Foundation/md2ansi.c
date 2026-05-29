@@ -11,7 +11,7 @@ A **zero-dependency C11 implementation** that converts Markdown to ANSI-colored 
 
 ## Overview
 
-A pure C11 implementation of a Markdown → ANSI terminal renderer. The binary is statically self-contained (libc only), ~54KB, and renders a 39KB README in milliseconds.
+A pure C11 implementation of a Markdown → ANSI terminal renderer. The binary is statically self-contained (libc only), ~57KB, and renders a 39KB README in milliseconds.
 
 **Key Features:**
 
@@ -389,7 +389,7 @@ Modular, not monolithic. Each markdown subsystem lives in its own translation un
 | Benefit | Description |
 |:--------|:------------|
 | **Modular split** | Each feature isolated in its own `.c`/`.h` pair — easy to extend |
-| **Single binary deploy** | Statically structured, libc-only — copy one 54KB file to PATH |
+| **Single binary deploy** | Statically structured, libc-only — copy one ~57KB file to PATH |
 | **Hand-rolled scanners** | No `<regex.h>` — eliminates ReDoS surface, predictable perf |
 | **`-Werror` clean** | Zero warnings under `-Wall -Wextra -Wpedantic -Werror` |
 | **Type-safe core** | `md_buf_t`, `md_lines_t`, `md_block_t`, `md_doc_t` give consistent ownership rules |
@@ -534,7 +534,7 @@ typedef struct {
 | **test-links.sh** | Inline `[t](url)`, image `![a](u)`, ref `[t][r]`, shortcut `[r]`, autolink `<url>`, bare URL autolink, `--no-links` / `--no-images` / `--no-bare-urls` |
 | **test-escapes.sh** | `\*`, `\\`, `\#`, `\[`/`\]`, `` \` ``, YAML frontmatter strip (both `---` and `...` terminators) |
 
-**Total test coverage:** 649 lines across 13 files.
+**Total test coverage:** ~1,000 lines across 14 suites (run `make stats`).
 
 ### Running Tests
 
@@ -589,6 +589,8 @@ make test       # run full test suite
 make clean      # remove binary + object files
 make install    # install to /usr/local/bin (requires sudo for system dirs)
 make uninstall  # remove from /usr/local/bin
+make stats      # print source/test LOC + binary size
+make release-notes  # print CHANGELOG body for the current version
 make help       # show targets + active variables
 ```
 
@@ -635,7 +637,7 @@ Before submitting changes:
 - [ ] New scanners are hand-rolled (no `<regex.h>`)
 - [ ] New CLI flags documented in `show_help` AND README
 - [ ] Tests cover new features (assertion + edge cases)
-- [ ] `make test` passes 11/11
+- [ ] `make test` passes 14/14
 
 ## Performance
 
@@ -645,7 +647,7 @@ A 39KB / ~1217-line README renders in ~2ms on a modern desktop CPU. The pipeline
 
 ### Memory Usage
 
-- **Static**: ~54KB binary, ~2MB resident on libc startup
+- **Static**: ~57KB binary, ~2MB resident on libc startup
 - **Dynamic**: O(file size) — one slurp buffer per file, plus parsed `md_doc_t` block list. A 10MB markdown file uses roughly 25–30MB peak RSS
 
 ### Throughput Characteristics
@@ -741,7 +743,7 @@ $EDITOR parser.c inline.c
 # 2. Build (must be clean under -Werror)
 make
 
-# 3. Run the test suite (must be 11/11)
+# 3. Run the test suite (must be 14/14)
 make test
 
 # 4. Smoke test manually
@@ -756,10 +758,35 @@ git commit -m "Add feature: description"
 ### Pre-merge Requirements
 
 - ✓ Compiles clean under `-O2 -std=c11 -Wall -Wextra -Wpedantic -Werror`
-- ✓ Passes `make test` (11/11)
+- ✓ Passes `make test` (14/14)
 - ✓ New features have test coverage
 - ✓ CLI changes documented in `show_help` AND this README
 - ✓ No new external dependencies
+
+### Releasing
+
+Version markers live in `md_common.h` (`MD_VERSION`), `md2ansi.1` (`.TH`), and
+`README.md` (badge + footer). Bump them together, then move the
+`CHANGELOG.md` `[Unreleased]` entries under a new `[X.Y.Z]` heading and add the
+compare links.
+
+GitHub release notes come straight from the CHANGELOG via `make release-notes`,
+so the two never drift:
+
+```bash
+# Notes for the current MD_VERSION
+make release-notes
+
+# Tag and publish — body is the CHANGELOG section, no manual copy/paste
+git tag -a vX.Y.Z -m "md2ansi.c X.Y.Z" && git push origin vX.Y.Z
+gh release create vX.Y.Z \
+  --title "vX.Y.Z — summary" \
+  --notes-file <(make -s release-notes RELEASE_VERSION=X.Y.Z)
+```
+
+`make release-notes` bounds the section on the next version heading, the
+link-reference footer, or `#fin`, so it stays correct even for the last entry
+in the file.
 
 ## External Tools Used
 
@@ -775,13 +802,15 @@ git commit -m "Add feature: description"
 
 ## Project Statistics
 
+Figures are approximate — run `make stats` for exact current values.
+
 | Metric | Value |
 |:-------|:------|
-| **Source code lines** | 2,952 (9 modules + headers + main) |
+| **Source code lines** | ~2,965 (9 modules + headers + main) |
 | **Largest module** | `parser.c` (565 lines) |
-| **Test code lines** | 649 (11 test files + runner + utils) |
-| **Test suites** | 11 (all passing) |
-| **Binary size** | ~54KB (dynamically linked) |
+| **Test code lines** | ~1,000 (14 test files + runner + utils) |
+| **Test suites** | 14 (all passing) |
+| **Binary size** | ~57KB (dynamically linked) |
 | **Runtime dependencies** | 1 (libc only) |
 | **External libraries** | 0 |
 | **Build time** | <2 seconds on a modern machine |
