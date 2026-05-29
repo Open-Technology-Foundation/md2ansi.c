@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Robustness and maintainability hardening from a full code review. No CLI-surface
+change; rendered output is byte-identical to 1.0.2.
+
+### Changed
+
+- `md_slurp_file`: read via `open` + `fstat` + `fdopen` on a single descriptor,
+  closing the `stat`/`access`/`fopen` TOCTOU window (exit codes 3/4/13 preserved).
+- De-duplicated the CSI/OSC escape walker into a single shared `md_ansi_skip()`
+  used by all four strip/width routines (net source reduction).
+- `NO_COLOR`: now follows the [no-color.org](https://no-color.org/) convention —
+  any presence, including an empty value, disables colour (matches the man page).
+- `COLUMNS`: parsed with `strtol` + range/tail validation instead of `atoi`.
+- Makefile: optimization level is now the user-tunable `OPT` (default `-O2`);
+  mandatory flags are force-appended via `override CFLAGS +=`, so
+  `make CFLAGS=...` can no longer drop `-D_XOPEN_SOURCE=700`.
+- README: project-size figures are now approximate and reference `make stats`.
+- `mdview`: shebang normalised to `#!/usr/bin/env bash`.
+
+### Added
+
+- `md_ansi_skip()` additionally handles DCS/APC/PM/SOS string controls.
+- `make stats` target reporting source/test LOC and binary size.
+
+### Fixed
+
+- `md_buf_reserve`: clamp capacity doubling at `SIZE_MAX/2` to avoid a
+  theoretical overflow; fall back to the exact required size.
+- `md_strip_ansi_inplace`: re-terminate `buf[out]` after stripping.
+- UTF-8 decoder: reject overlong encodings and codepoints above `U+10FFFF`
+  (emit `U+FFFD`).
+
 ## [1.0.2] - 2026-05-14
 
 ### Changed
