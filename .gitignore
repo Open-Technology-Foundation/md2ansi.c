@@ -6,4 +6,5 @@ tests/fixtures/tmp/
 BASH-CODING-STANDARD.md
 # Local AI assistant context — never tracked.
 CLAUDE.md
+CLAUDE.*.md
 .claude/
