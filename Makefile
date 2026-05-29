@@ -21,6 +21,9 @@ COMPDIR ?= $(PREFIX)/share/bash-completion/completions
 DATADIR ?= $(PREFIX)/share/mdview
 DESTDIR ?=
 
+# Version used by `release-notes` (defaults to the current MD_VERSION marker).
+RELEASE_VERSION ?= $(shell grep -oE '[0-9]+\.[0-9]+\.[0-9]+' $(srcdir)md_common.h | head -1)
+
 # Directory of this Makefile (trailing slash). Anchors install-recipe sources
 # so they cannot resolve against the invoking CWD (or a like-named file in a
 # parent directory). Does NOT make off-CWD `make -f ... install` fully work
@@ -36,7 +39,7 @@ OBJS         := md_common.o ansi.o unicode.o parser.o inline.o render.o table.o 
 HDRS         := md_common.h ansi.h unicode.h parser.h inline.h render.h table.h syntax.h
 
 .PHONY: all install install-bin install-companions install-man install-comp install-data install-themes \
-        uninstall check test clean stats help
+        uninstall check test clean stats release-notes help
 
 all: $(BIN)
 
@@ -113,6 +116,23 @@ stats:
 	@printf 'Binary:      %s bytes\n' \
 	  "$$(wc -c < $(srcdir)$(BIN) 2>/dev/null || echo '? (run make first)')"
 
+# Print the CHANGELOG body for RELEASE_VERSION, stripped of the link-reference
+# footer and #fin marker, for `gh release create --notes-file`. Bounds the
+# section on the next version heading, a link-ref line, OR #fin -- so it stays
+# correct even when the requested version is the LAST section in the file.
+#   make release-notes                       # current version
+#   make release-notes RELEASE_VERSION=1.0.1 # a specific version
+release-notes:
+	@awk -v v="$(RELEASE_VERSION)" ' \
+	  $$0 ~ "^## \\[" v "\\]" { f=1; next } \
+	  /^## \[/ || /^\[[^]]+\]:/ || /^#fin/ { f=0 } \
+	  f { buf = buf $$0 "\n" } \
+	  END { \
+	    sub(/^\n+/, "", buf); sub(/\n+$$/, "", buf); \
+	    if (buf == "") { print "release-notes: no CHANGELOG section for " v > "/dev/stderr"; exit 1 } \
+	    print buf \
+	  }' $(srcdir)CHANGELOG.md
+
 help:
 	@echo 'Usage: make [target]'
 	@echo ''
@@ -130,6 +150,7 @@ help:
 	@echo '  test               Run test suite'
 	@echo '  clean              Remove build artifacts'
 	@echo '  stats              Print source/test LOC + binary size'
+	@echo '  release-notes      Print CHANGELOG body for RELEASE_VERSION'
 	@echo '  help               Show this message'
 	@echo ''
 	@echo 'Variables:'
@@ -142,3 +163,4 @@ help:
 	@echo '  DESTDIR  = $(DESTDIR)'
 	@echo '  CC       = $(CC)'
 	@echo '  CFLAGS   = $(CFLAGS)'
+	@echo '  RELEASE_VERSION = $(RELEASE_VERSION)'
